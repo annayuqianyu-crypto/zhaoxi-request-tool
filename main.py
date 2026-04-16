@@ -343,7 +343,37 @@ async def generate_section(req: GenerateRequest):
         cleaned = re.sub(r"```(?:mermaid)?\s*", "", raw).replace("```", "").strip()
         return {"type": "flowchart", "mermaid": cleaned, "requirements": []}
 
-    elif req.type in ("summary", "wireframe", "preview"):
+    elif req.type == "wireframe":
+        # 生成功能流程设计图（Mermaid），侧重系统交互路径与分支方案
+        prompt = f"""根据以下访谈记录，生成一份 IT 人员使用的功能流程设计图（Mermaid 格式）。
+
+访谈记录：
+{history_text}
+
+要求：
+- 使用 graph LR 方向（横向流程，适合多方案并排）
+- 如有多个实现方案或路径，用 subgraph 分别展示（如 subgraph 方案一、subgraph 方案二）
+- 矩形节点表示操作步骤，菱形{{}}表示判断节点，圆角([])表示开始/结束
+- 中文标签，每个标签不超过8字
+- 添加以下 classDef：
+  classDef user fill:#fff3cd,stroke:#f59e0b,color:#92400e
+  classDef system fill:#dbeafe,stroke:#3b82f6,color:#1e40af
+  classDef decision fill:#fce7f3,stroke:#ec4899,color:#831843
+  classDef endpoint fill:#d1fae5,stroke:#10b981,color:#065f46
+- 用户操作节点加 :::user，系统处理节点加 :::system，判断节点加 :::decision，开始/结束加 :::endpoint
+- 只输出 Mermaid 代码，不要任何其他文字"""
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o", max_tokens=2500,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        except Exception as e:
+            raise HTTPException(500, f"生成失败：{e}")
+        raw = response.choices[0].message.content
+        cleaned = re.sub(r"```(?:mermaid)?\s*", "", raw).replace("```", "").strip()
+        return {"type": "wireframe", "mermaid": cleaned, "requirements": []}
+
+    elif req.type in ("summary", "preview"):
         if req.type == "summary":
             extra = "只需要 module/feature/description/process/inputs/outputs 字段，无需 wireframe。"
         else:

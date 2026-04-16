@@ -532,21 +532,26 @@
         </div>
       </div>
 
-      <!-- 📐 线框图 -->
+      <!-- 📐 线框图（功能流程设计图） -->
       <div id="req-sub-wireframe" class="req-sub">
         <div class="gen-header">
           <div class="gen-header-left">
             <span class="gen-icon">📐</span>
             <div>
-              <div class="gen-title">界面线框图</div>
-              <div class="gen-subtitle">为每个功能生成页面布局描述</div>
+              <div class="gen-title">功能流程设计图</div>
+              <div class="gen-subtitle">多方案路径 · 交互节点 · 判断分支，IT人员可直接使用</div>
             </div>
           </div>
-          <button class="gen-btn" id="gen-wireframe-btn" onclick="generateSection('wireframe')">⚡ 生成</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="diagram-tool-btn" onclick="zoomWireframe(0.2)">＋</button>
+            <button class="diagram-tool-btn" onclick="zoomWireframe(-0.2)">－</button>
+            <button class="diagram-tool-btn" onclick="resetWireframeZoom()">适应</button>
+            <button class="gen-btn" id="gen-wireframe-btn" onclick="generateSection('wireframe')">⚡ 生成</button>
+          </div>
         </div>
-        <div class="gen-content-wrap">
-          <div id="wireframe-list">
-            <div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将为每个功能点生成界面草图描述<br><span style="font-size:12px;color:#cbd5e0">包含顶部/中部/底部布局说明</span></div>
+        <div class="gen-content-wrap" style="padding:12px;">
+          <div id="wireframe-diagram-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;display:flex;align-items:center;justify-content:center;overflow:auto;">
+            <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成包含多方案路径的功能流程设计图<br><span style="font-size:12px;color:#cbd5e0">类似 Visio 流程图风格，IT团队可直接用于开发</span></div>
           </div>
         </div>
       </div>
@@ -1261,19 +1266,18 @@ async function generateSection(type) {
       currentMermaid = data.mermaid;
       await renderConvDiagram(data.mermaid);
       setGenBtnState(type, 'done');
-      showToast('🔄 流程图已生成');
+      showToast('🔄 业务流程图已生成');
+    } else if (type === 'wireframe' && data.mermaid) {
+      await renderWireframeDiagram(data.mermaid);
+      setGenBtnState(type, 'done');
+      showToast('📐 功能流程设计图已生成');
     } else if (data.requirements && data.requirements.length) {
       currentRequirements = data.requirements;
       if (type === 'summary') {
         renderSummaryOnly(data.requirements);
         setGenBtnState(type, 'done');
         showToast(`📝 已提取 ${data.requirements.length} 条需求，正在同步生成流程图…`);
-        // 同步触发需求清单→流程图生成
         generateSection('flowchart');
-      } else if (type === 'wireframe') {
-        renderWireframeOnly(data.requirements);
-        setGenBtnState(type, 'done');
-        showToast('📐 线框图已生成');
       } else if (type === 'preview') {
         renderRequirementsPreview(data.requirements);
         setGenBtnState(type, 'done');
@@ -1300,12 +1304,30 @@ function renderSummaryOnly(list) {
   document.getElementById('req-count').textContent = list.length;
 }
 
-function renderWireframeOnly(list) {
-  const el = document.getElementById('wireframe-list');
-  el.innerHTML = '';
-  const withWF = list.filter(r => typeof r === 'object' && r.wireframe);
-  if (!withWF.length) { el.innerHTML = '<div class="req-empty">暂无界面草图信息<br><span style="font-size:12px;color:#cbd5e0">请先生成需求梳理</span></div>'; return; }
-  withWF.forEach((req, i) => renderWireframeItem(el, req, i));
+// 线框图（功能流程设计图）专属渲染
+let wireframeScale = 1;
+async function renderWireframeDiagram(code) {
+  diagCounter++;
+  const wrap = document.getElementById('wireframe-diagram-wrap');
+  if (!wrap) return;
+  try {
+    const { svg } = await mermaid.render('mmd-wf-' + diagCounter, code);
+    wrap.innerHTML = svg;
+    const s = wrap.querySelector('svg');
+    if (s) { s.style.transform = `scale(${wireframeScale})`; s.style.transformOrigin = 'top center'; s.style.maxWidth = '100%'; }
+  } catch(e) {
+    wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图渲染失败，AI正在修正中</div>';
+  }
+}
+function zoomWireframe(delta) {
+  wireframeScale = Math.max(0.3, Math.min(3, wireframeScale + delta));
+  const s = document.querySelector('#wireframe-diagram-wrap svg');
+  if (s) { s.style.transform = `scale(${wireframeScale})`; s.style.transformOrigin = 'top center'; }
+}
+function resetWireframeZoom() {
+  wireframeScale = 1;
+  const s = document.querySelector('#wireframe-diagram-wrap svg');
+  if (s) s.style.transform = 'scale(1)';
 }
 
 // ── PRD 生成 ──
