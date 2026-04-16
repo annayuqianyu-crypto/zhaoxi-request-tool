@@ -121,10 +121,16 @@
     .synergy-item strong { display:block; font-size:13px; color:#2d3748; margin-bottom:2px; }
     .synergy-item p { font-size:12px; color:#718096; margin:0; line-height:1.5; }
 
-    .scenario-box { background:white; border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
-    .scenario-box h4 { font-size:13px; font-weight:700; color:#4a5568; margin:0 0 10px; }
-    .scenario-tags { display:flex; flex-wrap:wrap; gap:6px; }
-    .scenario-tag { font-size:12px; background:var(--blue-light); color:var(--blue); padding:4px 10px; border-radius:12px; border:1px solid #bee3f8; }
+    /* 朝曦业务范围展示 */
+    .biz-scope-box { background:white; border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+    .biz-scope-box-title { font-size:13px; font-weight:700; color:#2d3748; margin:0 0 12px; display:flex; align-items:center; gap:6px; }
+    .biz-scope-box-title::after { content:''; flex:1; height:1px; background:var(--border); }
+    .biz-scope-list { display:flex; flex-direction:column; gap:11px; }
+    .biz-scope-section { display:flex; flex-direction:column; gap:5px; }
+    .biz-scope-title { font-size:11px; font-weight:700; color:#4a5568; letter-spacing:.4px; display:flex; align-items:center; gap:5px; }
+    .biz-scope-icon { font-size:13px; }
+    .biz-scope-tags { display:grid; grid-template-columns:repeat(3,1fr); gap:4px 6px; }
+    .biz-scope-tag { font-size:11.5px; background:var(--blue-light); color:#2b6cb0; padding:4px 6px; border-radius:8px; border:1px solid #bee3f8; text-align:center; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
     /* ── Diagram tab ── */
     #diagram-wrap { background:white; border:1px solid var(--border); border-radius:12px; padding:20px; min-height:220px; display:flex; align-items:center; justify-content:center; overflow:auto; }
@@ -687,45 +693,88 @@
         </div>
       </div>
 
-      <div class="scenario-box">
-        <h4>朝曦典型适用场景</h4>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <div>
-            <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">家族财富架构</div>
-            <div class="scenario-tags">
-              <span class="scenario-tag">境内家族股权信托台账</span>
-              <span class="scenario-tag">境外信托架构管理</span>
-              <span class="scenario-tag">全球资产配置追踪</span>
-              <span class="scenario-tag">财富传承方案管理</span>
+      <div class="biz-scope-box">
+        <div class="biz-scope-box-title">🏢 朝曦业务范围展示</div>
+        <div class="biz-scope-list">
+
+          <!-- 家族财富传承 -->
+          <div class="biz-scope-section">
+            <div class="biz-scope-title"><span class="biz-scope-icon">🏛️</span>家族财富传承</div>
+            <div class="biz-scope-tags">
+              <span class="biz-scope-tag">境内家族股权信托</span>
+              <span class="biz-scope-tag">离岸信托架构</span>
+              <span class="biz-scope-tag">美/加信托结构</span>
+              <span class="biz-scope-tag">全球资产配置</span>
+              <span class="biz-scope-tag">保险传承结构</span>
+              <span class="biz-scope-tag">精算现金流评估</span>
             </div>
           </div>
-          <div>
-            <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">全球税务规划</div>
-            <div class="scenario-tags">
-              <span class="scenario-tag">上市公司股东减持税务</span>
-              <span class="scenario-tag">美/加税务合规申报</span>
-              <span class="scenario-tag">CRS/FATCA风险识别</span>
-              <span class="scenario-tag">跨境架构涉税管理</span>
+
+          <!-- 全球税务规划 -->
+          <div class="biz-scope-section">
+            <div class="biz-scope-title"><span class="biz-scope-icon">🌐</span>全球税务规划</div>
+            <div class="biz-scope-tags">
+              <span class="biz-scope-tag">美/加税务合规申报</span>
+              <span class="biz-scope-tag">上市公司减持税务</span>
+              <span class="biz-scope-tag">跨境资金涉税服务</span>
+              <span class="biz-scope-tag">境内外架构重组</span>
+              <span class="biz-scope-tag">股权类税优方案</span>
+              <span class="biz-scope-tag">家族成员税籍规划</span>
             </div>
           </div>
-          <div>
-            <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">资本市场服务</div>
-            <div class="scenario-tags">
-              <span class="scenario-tag">股东减持规划系统</span>
-              <span class="scenario-tag">拟上市架构设计台账</span>
-              <span class="scenario-tag">股权激励方案管理</span>
-              <span class="scenario-tag">私募基金架构追踪</span>
+
+          <!-- 全球法律咨询 -->
+          <div class="biz-scope-section">
+            <div class="biz-scope-title"><span class="biz-scope-icon">⚖️</span>全球法律咨询</div>
+            <div class="biz-scope-tags">
+              <span class="biz-scope-tag">企业上市与私募</span>
+              <span class="biz-scope-tag">投融资与并购</span>
+              <span class="biz-scope-tag">公司治理架构</span>
+              <span class="biz-scope-tag">婚姻家事资产</span>
+              <span class="biz-scope-tag">企业合规与劳动</span>
+              <span class="biz-scope-tag">不良资产处置</span>
             </div>
           </div>
-          <div>
-            <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">法律与企业治理</div>
-            <div class="scenario-tags">
-              <span class="scenario-tag">婚姻家事资产架构</span>
-              <span class="scenario-tag">合同生命周期管理</span>
-              <span class="scenario-tag">ESG合规报告平台</span>
-              <span class="scenario-tag">客户档案与服务台账</span>
+
+          <!-- 资本市场与家企架构 -->
+          <div class="biz-scope-section">
+            <div class="biz-scope-title"><span class="biz-scope-icon">📈</span>资本市场与家企架构</div>
+            <div class="biz-scope-tags">
+              <span class="biz-scope-tag">上市公司市值管理</span>
+              <span class="biz-scope-tag">股东融资与退出</span>
+              <span class="biz-scope-tag">拟上市顶层设计</span>
+              <span class="biz-scope-tag">股权激励方案</span>
+              <span class="biz-scope-tag">私募基金架构</span>
+              <span class="biz-scope-tag">董监高风险管理</span>
             </div>
           </div>
+
+          <!-- 企业治理与ESG -->
+          <div class="biz-scope-section">
+            <div class="biz-scope-title"><span class="biz-scope-icon">🌱</span>企业治理与ESG</div>
+            <div class="biz-scope-tags">
+              <span class="biz-scope-tag">组织战略与效能</span>
+              <span class="biz-scope-tag">激励体系建设</span>
+              <span class="biz-scope-tag">接班人培育计划</span>
+              <span class="biz-scope-tag">ESG诊断与披露</span>
+              <span class="biz-scope-tag">绿色金融应用</span>
+              <span class="biz-scope-tag">ESG长期市值管理</span>
+            </div>
+          </div>
+
+          <!-- 综合增值服务 -->
+          <div class="biz-scope-section">
+            <div class="biz-scope-title"><span class="biz-scope-icon">✨</span>综合增值服务</div>
+            <div class="biz-scope-tags">
+              <span class="biz-scope-tag">子女精英教育规划</span>
+              <span class="biz-scope-tag">全球重症医疗管理</span>
+              <span class="biz-scope-tag">公益慈善基金会</span>
+              <span class="biz-scope-tag">海外身份规划</span>
+              <span class="biz-scope-tag">健康管理方案</span>
+              <span class="biz-scope-tag">心理健康服务</span>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
