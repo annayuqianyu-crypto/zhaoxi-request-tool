@@ -420,6 +420,80 @@ async def generate_section(req: GenerateRequest):
     raise HTTPException(400, "未知生成类型")
 
 
+@app.post("/api/analyze-definition")
+async def analyze_definition(req: ExportRequest):
+    history_text = "\n\n".join(
+        f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
+        for m in req.history
+    )
+    req_text = "\n".join([
+        f"- {r.get('module','')}: {r.get('feature','')} — {r.get('description','')}"
+        if isinstance(r, dict) else f"- {r}"
+        for r in req.requirements
+    ]) if req.requirements else "（暂无结构化需求，请根据访谈记录分析）"
+
+    prompt = f"""你是朝曦金融科技架构顾问，精通 Claude Agent SDK 中 Skill 和 Agent 的设计原则。
+
+请根据以下访谈记录和已梳理需求，判断该需求更适合实现为 Skill 还是 Agent，并给出详细分析。
+
+## 访谈记录
+{history_text}
+
+## 已梳理需求
+{req_text}
+
+## 判断标准参考
+
+**Skill（专项技能）适合以下情形：**
+- 输入输出明确，逻辑相对固定
+- 单一职责，完成一件具体的事
+- 无需自主决策或动态规划
+- 可被其他系统或 Agent 直接调用
+- 执行时间短，结果可预期
+
+**Agent（自主智能体）适合以下情形：**
+- 需要多步骤推理和动态决策
+- 要根据中间结果调整后续行动
+- 需要协调调用多个工具或 Skill
+- 有较长任务生命周期或需要持久化状态
+- 能处理异常情况并自主恢复
+
+请严格按以下 JSON 格式输出，不要输出任何其他文字：
+{{
+  "recommendation": "Skill" 或 "Agent" 或 "Skill + Agent 组合",
+  "confidence": 0到100的整数,
+  "summary": "一句话核心结论，不超过40字",
+  "skill_fit": 0到100整数,
+  "agent_fit": 0到100整数,
+  "reasons_for": ["推荐此方案的核心理由1（结合具体需求场景）", "理由2", "理由3"],
+  "reasons_against": ["不宜用另一种方式的理由1", "理由2"],
+  "skill_roles": ["若涉及Skill，它负责的具体模块1", "模块2"],
+  "agent_roles": ["若涉及Agent，它负责的具体能力1", "能力2"],
+  "architecture_suggestion": "2-3句话的架构落地建议，结合朝曦业务场景"
+}}"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o", max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+    except Exception as e:
+        raise HTTPException(500, f"分析失败：{e}")
+
+    raw = response.choices[0].message.content
+    cleaned = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        match = re.search(r"\{[\s\S]*\}", cleaned)
+        if match:
+            try:
+                return json.loads(match.group())
+            except Exception:
+                pass
+    raise HTTPException(500, "分析结果解析失败，请重试")
+
+
 @app.post("/api/export/word")
 async def export_word(req: WordExportReq):
     from docx import Document

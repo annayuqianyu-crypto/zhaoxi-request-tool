@@ -383,6 +383,77 @@
     .btn-secondary:hover { background:#e2e8f0; }
     .btn-success { background:#38a169; color:white; }
     .btn-success:hover { background:#2f855a; }
+
+    /* ── Function Definition Tab ── */
+    #tab-definition { overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; }
+    .def-intro { text-align:center; padding:4px 0 2px; }
+    .def-intro-title { font-size:15px; font-weight:700; color:var(--navy); margin-bottom:4px; }
+    .def-intro-sub { font-size:12px; color:#718096; }
+    .def-cards { display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+    .def-card { border-radius:12px; padding:14px; border:1.5px solid; }
+    .def-skill-card { background:#ebf8ff; border-color:#90cdf4; }
+    .def-agent-card { background:#faf5ff; border-color:#d6bcfa; }
+    .def-card-hdr { display:flex; align-items:center; gap:9px; margin-bottom:9px; }
+    .def-card-icon { font-size:22px; line-height:1; }
+    .def-card-name { font-size:15px; font-weight:800; }
+    .def-skill-card .def-card-name { color:#2b6cb0; }
+    .def-agent-card .def-card-name { color:#6b46c1; }
+    .def-card-cn { font-size:10px; color:#718096; margin-top:1px; }
+    .def-card-desc { font-size:11px; color:#4a5568; line-height:1.6; margin-bottom:9px; border-left:2px solid; padding-left:8px; }
+    .def-skill-card .def-card-desc { border-color:#4299e1; }
+    .def-agent-card .def-card-desc { border-color:#9f7aea; }
+    .def-traits { display:flex; flex-direction:column; gap:3px; margin-bottom:10px; }
+    .def-trait { font-size:11px; }
+    .def-skill-card .def-trait { color:#2b6cb0; }
+    .def-agent-card .def-trait { color:#6b46c1; }
+    .def-ex-label { font-size:10px; font-weight:700; color:#a0aec0; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
+    .def-ex-tags { display:flex; flex-wrap:wrap; gap:4px; }
+    .def-skill-card .def-ex-tags span { background:#bee3f8; color:#2b6cb0; font-size:10px; padding:2px 8px; border-radius:10px; }
+    .def-agent-card .def-ex-tags span { background:#e9d8fd; color:#6b46c1; font-size:10px; padding:2px 8px; border-radius:10px; }
+
+    /* Analysis section */
+    .def-analyze-box { background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+    .def-analyze-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); background:#fafbfc; }
+    .def-analyze-title { font-size:13px; font-weight:700; color:var(--navy); }
+    .def-analyze-sub { font-size:11px; color:#a0aec0; margin-top:2px; }
+    .def-empty { text-align:center; padding:28px 16px; color:#a0aec0; font-size:13px; line-height:1.8; }
+
+    /* Result cards */
+    .def-result-wrap { padding:0; }
+    .def-verdict { display:flex; align-items:center; gap:14px; padding:16px 18px; border-bottom:1px solid var(--border); }
+    .def-verdict-badge { padding:6px 18px; border-radius:20px; font-size:15px; font-weight:800; flex-shrink:0; }
+    .verdict-skill { background:#ebf8ff; color:#2b6cb0; border:1.5px solid #90cdf4; }
+    .verdict-agent { background:#faf5ff; color:#6b46c1; border:1.5px solid #d6bcfa; }
+    .verdict-both  { background:#f0fff4; color:#276749; border:1.5px solid #9ae6b4; }
+    .def-verdict-right { flex:1; }
+    .def-verdict-summary { font-size:13px; color:#4a5568; line-height:1.6; }
+    .def-verdict-conf { font-size:11px; color:#a0aec0; margin-top:3px; }
+
+    .def-gauge-row { display:grid; grid-template-columns:1fr 1fr; gap:0; border-bottom:1px solid var(--border); }
+    .def-gauge-cell { padding:12px 18px; }
+    .def-gauge-cell:first-child { border-right:1px solid var(--border); }
+    .def-gauge-lbl { font-size:11px; font-weight:700; color:#718096; margin-bottom:6px; }
+    .def-gauge-bar { height:7px; background:#edf2f7; border-radius:4px; overflow:hidden; margin-bottom:4px; }
+    .def-gauge-fill { height:100%; border-radius:4px; transition:width 1.2s cubic-bezier(.4,0,.2,1); }
+    .fill-skill { background:linear-gradient(to right,#63b3ed,#2b6cb0); }
+    .fill-agent { background:linear-gradient(to right,#b794f4,#6b46c1); }
+    .def-gauge-pct { font-size:13px; font-weight:700; }
+    .pct-skill { color:#2b6cb0; }
+    .pct-agent { color:#6b46c1; }
+
+    .def-detail-block { padding:14px 18px; border-bottom:1px solid var(--border); }
+    .def-detail-block:last-child { border-bottom:none; }
+    .def-detail-lbl { font-size:11px; font-weight:700; color:#718096; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; display:flex; align-items:center; gap:5px; }
+    .def-reason-list { display:flex; flex-direction:column; gap:6px; }
+    .def-reason-item { display:flex; gap:7px; font-size:12px; color:#4a5568; line-height:1.6; }
+    .def-reason-dot { flex-shrink:0; margin-top:3px; width:6px; height:6px; border-radius:50%; }
+    .dot-for { background:#48bb78; }
+    .dot-against { background:#fc8181; }
+    .def-role-chips { display:flex; flex-wrap:wrap; gap:6px; }
+    .def-role-chip { font-size:11px; padding:3px 10px; border-radius:10px; font-weight:500; }
+    .chip-skill-role { background:#ebf8ff; color:#2b6cb0; border:1px solid #90cdf4; }
+    .chip-agent-role { background:#faf5ff; color:#6b46c1; border:1px solid #d6bcfa; }
+    .def-arch-box { background:#f7fafc; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:12px; color:#4a5568; line-height:1.75; }
   </style>
 </head>
 <body>
@@ -486,6 +557,7 @@
       <button class="tab-btn" onclick="switchTab('requirements',this)" id="tab-req-btn">
         需求清单<span class="req-badge" id="req-count">0</span>
       </button>
+      <button class="tab-btn" onclick="switchTab('definition',this)" id="tab-def-btn">💡 功能定义</button>
     </div>
 
     <!-- Tab 1: Methodology -->
@@ -787,6 +859,78 @@
         </div>
       </div>
     </div>
+    <!-- Tab 4: Function Definition -->
+    <div class="panel-content" id="tab-definition">
+      <div class="def-intro">
+        <div class="def-intro-title">💡 Skill vs Agent — 如何定义您的需求？</div>
+        <div class="def-intro-sub">了解两者的本质差异，选择最适合的系统架构</div>
+      </div>
+
+      <!-- Definition Cards -->
+      <div class="def-cards">
+        <div class="def-card def-skill-card">
+          <div class="def-card-hdr">
+            <span class="def-card-icon">🔧</span>
+            <div>
+              <div class="def-card-name">Skill</div>
+              <div class="def-card-cn">专项技能单元</div>
+            </div>
+          </div>
+          <div class="def-card-desc">执行单一、明确任务的功能模块，输入输出固定，逻辑清晰，可被复用调用</div>
+          <div class="def-traits">
+            <div class="def-trait">✓ 单一职责，专注一件具体的事</div>
+            <div class="def-trait">✓ 输入输出明确，结果可预期</div>
+            <div class="def-trait">✓ 无需自主决策或动态规划</div>
+            <div class="def-trait">✓ 执行时间短，可被反复调用</div>
+            <div class="def-trait">✓ 可被 Agent 或其他系统直接调用</div>
+          </div>
+          <div class="def-ex-label">典型场景</div>
+          <div class="def-ex-tags">
+            <span>生成税务报告</span><span>发送审批通知</span>
+            <span>查询客户档案</span><span>格式化合同文档</span><span>数据校验入库</span>
+          </div>
+        </div>
+
+        <div class="def-card def-agent-card">
+          <div class="def-card-hdr">
+            <span class="def-card-icon">🤖</span>
+            <div>
+              <div class="def-card-name">Agent</div>
+              <div class="def-card-cn">自主智能体</div>
+            </div>
+          </div>
+          <div class="def-card-desc">能自主规划、决策并协调多工具完成复杂多步骤任务的智能系统</div>
+          <div class="def-traits">
+            <div class="def-trait">✓ 自主分解任务，动态调整策略</div>
+            <div class="def-trait">✓ 协调调用多个 Skill 或工具</div>
+            <div class="def-trait">✓ 能处理异常并自主恢复</div>
+            <div class="def-trait">✓ 具备上下文记忆，支持多轮交互</div>
+            <div class="def-trait">✓ 适应复杂或不确定的业务场景</div>
+          </div>
+          <div class="def-ex-label">典型场景</div>
+          <div class="def-ex-tags">
+            <span>端到端税务申报</span><span>智能客服处理</span>
+            <span>自动合规监控</span><span>多方协调审批</span><span>动态风控响应</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Analysis Section -->
+      <div class="def-analyze-box">
+        <div class="def-analyze-hdr">
+          <div>
+            <div class="def-analyze-title">📊 您的需求适合哪种定义？</div>
+            <div class="def-analyze-sub">基于访谈内容，AI为您的需求推荐最合适的系统定义</div>
+          </div>
+          <button class="gen-btn" id="gen-def-btn" onclick="analyzeDefinition()">⚡ 开始分析</button>
+        </div>
+        <div id="def-empty-tip" class="def-empty">
+          🔍 完成需求访谈后，点击「⚡ 开始分析」<br>AI将结合您的具体场景，判断需求适合做成 Skill 还是 Agent<br>
+          <span style="font-size:11px;color:#cbd5e0">分析结果包含：推荐理由、适配度评分、架构建议</span>
+        </div>
+        <div id="def-analysis-result" style="display:none;" class="def-result-wrap"></div>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -1029,7 +1173,7 @@ function switchTab(name, btn) {
   document.getElementById('tab-'+name).classList.add('active');
 }
 function switchTabById(name) {
-  const ids = { diagram: 'tab-diagram-btn', requirements: 'tab-req-btn' };
+  const ids = { diagram: 'tab-diagram-btn', requirements: 'tab-req-btn', definition: 'tab-def-btn' };
   const btn = document.getElementById(ids[name] || 'tab-diagram-btn');
   if (btn) switchTab(name, btn);
 }
@@ -2040,6 +2184,101 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   } catch(e) {}
 });
+
+// ══════════════════════════════════════════
+// ── 功能定义分析 (Skill vs Agent) ──
+// ══════════════════════════════════════════
+
+async function analyzeDefinition() {
+  if (!history.length) { alert('请先进行需求访谈，再分析功能定义'); return; }
+  const btn = document.getElementById('gen-def-btn');
+  btn.textContent = '分析中…'; btn.disabled = true;
+  document.getElementById('def-empty-tip').style.display = 'none';
+  document.getElementById('def-analysis-result').style.display = 'none';
+  try {
+    const resp = await fetch('/api/analyze-definition', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    renderDefinitionResult(data);
+    btn.textContent = '⟳ 重新分析'; btn.disabled = false;
+    btn.classList.add('has-content');
+    showToast('💡 功能定义分析完成');
+  } catch(e) {
+    btn.textContent = '⚡ 开始分析'; btn.disabled = false;
+    document.getElementById('def-empty-tip').style.display = 'block';
+    alert('分析失败：' + e.message);
+  }
+}
+
+function renderDefinitionResult(d) {
+  const rec = d.recommendation || 'Skill';
+  const isSkill = rec.includes('Skill') && !rec.includes('Agent');
+  const isAgent = rec.includes('Agent') && !rec.includes('Skill');
+  const isBoth  = rec.includes('Skill') && rec.includes('Agent');
+  const verdictCls = isSkill ? 'verdict-skill' : isAgent ? 'verdict-agent' : 'verdict-both';
+  const skillW = d.skill_fit || 0, agentW = d.agent_fit || 0;
+
+  const reasonsFor = (d.reasons_for || []).map(r =>
+    `<div class="def-reason-item"><div class="def-reason-dot dot-for"></div><span>${esc(r)}</span></div>`).join('');
+  const reasonsAgainst = (d.reasons_against || []).map(r =>
+    `<div class="def-reason-item"><div class="def-reason-dot dot-against"></div><span>${esc(r)}</span></div>`).join('');
+  const skillRoles = (d.skill_roles || []).map(r =>
+    `<span class="def-role-chip chip-skill-role">🔧 ${esc(r)}</span>`).join('');
+  const agentRoles = (d.agent_roles || []).map(r =>
+    `<span class="def-role-chip chip-agent-role">🤖 ${esc(r)}</span>`).join('');
+
+  const html = `
+    <div class="def-verdict">
+      <div class="def-verdict-badge ${verdictCls}">${esc(rec)}</div>
+      <div class="def-verdict-right">
+        <div class="def-verdict-summary">${esc(d.summary || '')}</div>
+        <div class="def-verdict-conf">推荐确信度 ${d.confidence || 0}%</div>
+      </div>
+    </div>
+    <div class="def-gauge-row">
+      <div class="def-gauge-cell">
+        <div class="def-gauge-lbl">🔧 Skill 适配度</div>
+        <div class="def-gauge-bar"><div class="def-gauge-fill fill-skill" id="gf-skill" style="width:0%"></div></div>
+        <div class="def-gauge-pct pct-skill">${skillW}%</div>
+      </div>
+      <div class="def-gauge-cell">
+        <div class="def-gauge-lbl">🤖 Agent 适配度</div>
+        <div class="def-gauge-bar"><div class="def-gauge-fill fill-agent" id="gf-agent" style="width:0%"></div></div>
+        <div class="def-gauge-pct pct-agent">${agentW}%</div>
+      </div>
+    </div>
+    ${reasonsFor ? `<div class="def-detail-block">
+      <div class="def-detail-lbl">✅ 推荐理由</div>
+      <div class="def-reason-list">${reasonsFor}</div>
+    </div>` : ''}
+    ${reasonsAgainst ? `<div class="def-detail-block">
+      <div class="def-detail-lbl">⚠️ 另一方式的局限</div>
+      <div class="def-reason-list">${reasonsAgainst}</div>
+    </div>` : ''}
+    ${(skillRoles || agentRoles) ? `<div class="def-detail-block">
+      <div class="def-detail-lbl">📦 模块职责划分</div>
+      <div class="def-role-chips">${skillRoles}${agentRoles}</div>
+    </div>` : ''}
+    ${d.architecture_suggestion ? `<div class="def-detail-block">
+      <div class="def-detail-lbl">🏗️ 架构落地建议</div>
+      <div class="def-arch-box">${esc(d.architecture_suggestion)}</div>
+    </div>` : ''}`;
+
+  const el = document.getElementById('def-analysis-result');
+  el.innerHTML = html;
+  el.style.display = 'block';
+
+  // 动画：延迟触发进度条
+  setTimeout(() => {
+    const sf = document.getElementById('gf-skill');
+    const af = document.getElementById('gf-agent');
+    if (sf) sf.style.width = skillW + '%';
+    if (af) af.style.width = agentW + '%';
+  }, 80);
+}
 
 // ══════════════════════════════════════════
 // ── 设备选择 & 手机端 (Device & Mobile) ──
