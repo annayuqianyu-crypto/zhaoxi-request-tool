@@ -328,12 +328,22 @@
     .chip-btn { padding:5px 11px; background:white; border:1.5px solid #bee3f8; border-radius:20px; font-size:11.5px; color:var(--blue); cursor:pointer; white-space:nowrap; transition:all .18s; font-weight:500; }
     .chip-btn:hover { background:var(--blue-light); border-color:var(--blue); transform:scale(1.03); }
     .chips-label { font-size:11px; color:#a0aec0; width:100%; margin-bottom:2px; }
-    /* 分类场景选择器 */
+    /* 分类场景选择器（通用）*/
     .chips-category-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; width:100%; }
     .chips-cat-col { display:flex; flex-direction:column; gap:4px; }
     .chips-cat-title { font-size:10px; font-weight:700; color:#718096; letter-spacing:.5px; padding:2px 4px; background:#edf2f7; border-radius:4px; text-align:center; margin-bottom:1px; }
     .chip-btn-sm { padding:4px 6px; background:white; border:1px solid #bee3f8; border-radius:8px; font-size:10.5px; color:#2b6cb0; cursor:pointer; transition:all .15s; text-align:center; line-height:1.3; white-space:normal; }
     .chip-btn-sm:hover { background:#ebf8ff; border-color:#4299e1; }
+    /* 桌面端开场场景选择器 */
+    #desktop-opener { display:block; padding:10px 20px 12px; border-top:1px solid #edf2f7; background:#fafbfc; flex-shrink:0; }
+    #desktop-opener.hidden { display:none; }
+    body.mobile-mode #desktop-opener { display:none; }
+    .dop-label { font-size:11px; color:#a0aec0; margin-bottom:7px; }
+    .dop-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+    .dop-cat-col { display:flex; flex-direction:column; gap:5px; }
+    .dop-cat-title { font-size:11px; font-weight:700; color:#4a5568; letter-spacing:.4px; padding:3px 6px; background:#edf2f7; border-radius:5px; text-align:center; }
+    .dop-chip { padding:5px 8px; background:white; border:1px solid #bee3f8; border-radius:8px; font-size:11.5px; color:#2b6cb0; cursor:pointer; transition:all .15s; text-align:center; line-height:1.4; }
+    .dop-chip:hover { background:#ebf8ff; border-color:#4299e1; }
 
     /* body.mobile-mode overrides */
     body.mobile-mode header { padding:0 12px; height:50px; }
@@ -523,6 +533,11 @@
       <span id="stage-label">准备开始</span>
     </div>
     <div id="messages"></div>
+    <!-- Desktop opening scene picker -->
+    <div id="desktop-opener">
+      <div class="dop-label">选择您的业务场景快速开始：</div>
+      <div class="dop-grid" id="dop-grid"></div>
+    </div>
     <div id="attach-chips"></div>
     <!-- Mobile Grill-Me Quick Reply Chips -->
     <div id="quick-chips"></div>
@@ -1058,6 +1073,7 @@ async function sendMessage() {
   ta.value = '';
   autoResize(ta);
 
+  hideDesktopOpener();
   addMessage('user', text); // Show original text in UI
   setLoading(true);
   history.push({ role: 'user', content: fullContent });
@@ -2093,6 +2109,7 @@ function newSession() {
   ['summary','wireframe','preview','flowchart','prd'].forEach(t => setGenBtnState(t, 'idle'));
   // 重新加载开场白
   fetch('/api/init').then(r => r.json()).then(data => applyAIResponse(data, false)).catch(() => {});
+  showDesktopOpener();
   hideSessionsPanel();
   showToast('➕ 新任务已开始');
 }
@@ -2168,6 +2185,7 @@ function renderSessionsList() {
 
 // 页面加载时检查自动存档，提示恢复
 window.addEventListener('DOMContentLoaded', () => {
+  initDesktopOpener();
   try {
     const autosave = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null');
     if (autosave && autosave.history && autosave.history.length > 0) {
@@ -2184,6 +2202,7 @@ window.addEventListener('DOMContentLoaded', () => {
           rebuildChat();
           if (currentMermaid) renderConvDiagram(currentMermaid);
           if (currentRequirements.length) renderRequirements(currentRequirements);
+          hideDesktopOpener();
           showToast('📂 已恢复上次会话');
         }
       }, 800);
@@ -2397,6 +2416,37 @@ function useChip(btn, text) {
   // 轻微动效反馈
   btn.style.background = 'var(--blue-light)';
   setTimeout(() => btn.style.background = '', 300);
+}
+
+// ── 桌面端开场场景选择器 ──
+function initDesktopOpener() {
+  const grid = document.getElementById('dop-grid');
+  if (!grid) return;
+  const cats = GRILL_CHIPS.opening.categories;
+  grid.innerHTML = cats.map(cat =>
+    `<div class="dop-cat-col">
+      <div class="dop-cat-title">${cat.title}</div>
+      ${cat.chips.map(c => `<button class="dop-chip" onclick="useDopChip(${JSON.stringify(c)})">${c}</button>`).join('')}
+    </div>`
+  ).join('');
+}
+
+function useDopChip(text) {
+  const ta = document.getElementById('user-input');
+  ta.value = text;
+  autoResize(ta);
+  ta.focus();
+  hideDesktopOpener();
+}
+
+function hideDesktopOpener() {
+  const el = document.getElementById('desktop-opener');
+  if (el) el.classList.add('hidden');
+}
+
+function showDesktopOpener() {
+  const el = document.getElementById('desktop-opener');
+  if (el) el.classList.remove('hidden');
 }
 
 async function copyDoc() {
