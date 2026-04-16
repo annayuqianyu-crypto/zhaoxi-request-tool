@@ -294,6 +294,65 @@
     .exp-btn.exp-word { border-color:#38a169; color:#38a169; }
     .exp-btn.exp-word:hover { background:#f0fff4; }
 
+    /* ── Device Splash Screen ── */
+    #device-splash { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#0a1628 0%,#1a365d 45%,#2a4a7f 100%); }
+    .splash-inner { text-align:center; color:white; padding:32px 20px; max-width:500px; width:92%; }
+    .splash-watermark { font-size:11px; letter-spacing:4px; color:#90cdf4; text-transform:uppercase; margin-bottom:20px; opacity:.7; }
+    .splash-brand { font-size:38px; font-weight:800; letter-spacing:-1px; margin-bottom:10px; }
+    .splash-brand span { color:#48bb78; }
+    .splash-tagline { font-size:13px; color:#90cdf4; line-height:1.8; margin-bottom:24px; }
+    .splash-skills { display:flex; gap:7px; justify-content:center; flex-wrap:wrap; margin-bottom:36px; }
+    .splash-skill { font-size:11px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18); padding:4px 12px; border-radius:12px; color:#bee3f8; }
+    .splash-choices { display:flex; gap:16px; justify-content:center; margin-bottom:24px; }
+    .splash-card { flex:1; max-width:190px; background:rgba(255,255,255,.07); border:1.5px solid rgba(255,255,255,.18); border-radius:18px; padding:28px 16px 22px; cursor:pointer; transition:all .28s; }
+    .splash-card:hover { background:rgba(255,255,255,.17); border-color:rgba(255,255,255,.5); transform:translateY(-4px); box-shadow:0 16px 40px rgba(0,0,0,.35); }
+    .splash-card-icon { font-size:44px; margin-bottom:14px; }
+    .splash-card-title { font-size:18px; font-weight:700; margin-bottom:8px; }
+    .splash-card-desc { font-size:12px; color:#a0c4e8; line-height:1.7; }
+    .splash-footer { font-size:12px; color:rgba(255,255,255,.35); cursor:pointer; }
+    .splash-footer:hover { color:rgba(255,255,255,.65); }
+
+    /* ── Mobile Mode Layout ── */
+    .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; height:58px; background:white; border-top:1px solid var(--border); z-index:40; flex-direction:row; align-items:stretch; box-shadow:0 -3px 14px rgba(0,0,0,.08); }
+    .mob-nav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; cursor:pointer; border:none; background:none; color:#a0aec0; font-size:10px; font-weight:600; padding:6px 2px; transition:all .2s; position:relative; }
+    .mob-nav-item.active { color:var(--navy); }
+    .mob-nav-item .mob-icon { font-size:22px; line-height:1; }
+    .mob-req-badge { position:absolute; top:6px; right:18px; background:#48bb78; color:white; font-size:9px; font-weight:700; padding:1px 5px; border-radius:8px; display:none; }
+    .mob-req-badge.show { display:block; }
+    .mob-panel-handle-bar { display:none; }
+    .mob-switch-btn { display:none; padding:4px 10px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.3); color:rgba(255,255,255,.8); border-radius:6px; font-size:11px; cursor:pointer; transition:all .2s; }
+    .mob-switch-btn:hover { background:rgba(255,255,255,.25); }
+
+    /* Quick Reply Chips */
+    #quick-chips { display:none; padding:8px 12px 6px; gap:7px; flex-wrap:wrap; border-top:1px solid #edf2f7; background:#fafbfc; flex-shrink:0; }
+    .chip-btn { padding:7px 15px; background:white; border:1.5px solid #bee3f8; border-radius:20px; font-size:13px; color:var(--blue); cursor:pointer; white-space:nowrap; transition:all .18s; font-weight:500; }
+    .chip-btn:hover { background:var(--blue-light); border-color:var(--blue); transform:scale(1.03); }
+    .chips-label { font-size:11px; color:#a0aec0; width:100%; margin-bottom:2px; }
+
+    /* body.mobile-mode overrides */
+    body.mobile-mode header { padding:0 12px; height:50px; }
+    body.mobile-mode .logo { font-size:16px; }
+    body.mobile-mode .badge { display:none; }
+    body.mobile-mode .hdr-btn { display:none; }
+    body.mobile-mode #export-btn { display:none !important; }
+    body.mobile-mode .session-name-label { display:none; }
+    body.mobile-mode .mob-switch-btn { display:block; }
+    body.mobile-mode main { overflow:visible; }
+    body.mobile-mode #chat-panel { width:100%; border-right:none; height:calc(100dvh - 50px - 58px); }
+    body.mobile-mode #messages { padding:14px 12px; gap:12px; }
+    body.mobile-mode .bubble { font-size:14px; padding:10px 14px; max-width:90%; }
+    body.mobile-mode .avatar { width:28px; height:28px; font-size:11px; }
+    body.mobile-mode #input-area { padding:9px 12px; gap:8px; }
+    body.mobile-mode #user-input { font-size:15px; }
+    body.mobile-mode #quick-chips { display:flex; }
+    body.mobile-mode #right-panel { position:fixed; inset:0; z-index:45; transform:translateY(100%); transition:transform .35s cubic-bezier(.4,0,.2,1); border-radius:20px 20px 0 0; overflow:hidden; box-shadow:0 -8px 40px rgba(0,0,0,.22); }
+    body.mobile-mode #right-panel.mob-open { transform:translateY(0); }
+    body.mobile-mode .mobile-nav { display:flex; }
+    body.mobile-mode .mob-panel-handle-bar { display:flex; align-items:center; justify-content:center; padding:10px 0 6px; background:white; cursor:pointer; flex-shrink:0; border-bottom:1px solid var(--border); }
+    body.mobile-mode .mob-panel-handle { width:38px; height:4px; background:#cbd5e0; border-radius:2px; }
+    body.mobile-mode .tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
+    body.mobile-mode .req-subnav { overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
+
     /* ── Update Animations ── */
     @keyframes tabPulse { 0%{} 25%{background:#bee3f8;color:var(--navy);box-shadow:0 0 0 3px rgba(43,108,176,.15)} 100%{} }
     .tab-btn.flash-update { animation: tabPulse 1s ease; }
@@ -328,6 +387,35 @@
 </head>
 <body>
 
+<!-- ── Device Selection Splash ── -->
+<div id="device-splash">
+  <div class="splash-inner">
+    <div class="splash-watermark">朝曦金融高端客户服务平台</div>
+    <div class="splash-brand">需求<span>打磨</span>工作台</div>
+    <div class="splash-tagline">AI深度访谈 · 实时流程图 · 一键输出PRD<br>让业务团队无需懂IT，也能清晰表达需求</div>
+    <div class="splash-skills">
+      <span class="splash-skill">家族财富架构</span>
+      <span class="splash-skill">全球税务规划</span>
+      <span class="splash-skill">资本市场服务</span>
+      <span class="splash-skill">法律咨询</span>
+      <span class="splash-skill">企业治理</span>
+    </div>
+    <div class="splash-choices">
+      <div class="splash-card" onclick="selectDevice('desktop')">
+        <div class="splash-card-icon">💻</div>
+        <div class="splash-card-title">电脑端</div>
+        <div class="splash-card-desc">双面板布局<br>对话与流程图实时并排<br>完整功能体验</div>
+      </div>
+      <div class="splash-card" onclick="selectDevice('mobile')">
+        <div class="splash-card-icon">📱</div>
+        <div class="splash-card-title">手机端</div>
+        <div class="splash-card-desc">对话优先布局<br>随时随地发起访谈<br>快捷回复 + 语音输入</div>
+      </div>
+    </div>
+    <div class="splash-footer" onclick="selectDevice('desktop')">直接进入电脑端体验 →</div>
+  </div>
+</div>
+
 <!-- ── Header ── -->
 <header>
   <div style="display:flex;align-items:center">
@@ -345,6 +433,7 @@
     <button class="hdr-btn" onclick="showSessionsPanel()" title="查看所有已保存任务">📋 任务列表</button>
     <button class="hdr-btn hdr-new" onclick="newSession()" title="开始一个全新的需求访谈">➕ 新任务</button>
     <button id="export-btn" onclick="startExport()">⬇ 导出文档</button>
+    <button class="mob-switch-btn" onclick="switchDevice()" title="切换到电脑端">💻 电脑端</button>
   </div>
 </header>
 
@@ -358,6 +447,8 @@
     </div>
     <div id="messages"></div>
     <div id="attach-chips"></div>
+    <!-- Mobile Grill-Me Quick Reply Chips -->
+    <div id="quick-chips"></div>
     <div id="input-area">
       <textarea id="user-input" placeholder="描述您的业务场景，或回答分析师的问题…" rows="1"
         onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
@@ -385,6 +476,10 @@
 
   <!-- Right panel -->
   <div id="right-panel">
+    <!-- Mobile: drag handle to close panel -->
+    <div class="mob-panel-handle-bar" onclick="mobileClosePanel()">
+      <div class="mob-panel-handle"></div>
+    </div>
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('methodology',this)">工具方法论</button>
       <button class="tab-btn" onclick="switchTab('diagram',this)" id="tab-diagram-btn">访谈流程</button>
@@ -695,6 +790,23 @@
   </div>
 </main>
 
+<!-- ── Mobile Bottom Navigation ── -->
+<nav class="mobile-nav">
+  <button class="mob-nav-item active" id="mob-chat-btn" onclick="mobileShowTab('chat',this)">
+    <span class="mob-icon">💬</span>对话
+  </button>
+  <button class="mob-nav-item" id="mob-flow-btn" onclick="mobileShowTab('diagram',this)">
+    <span class="mob-icon">📊</span>流程图
+  </button>
+  <button class="mob-nav-item" id="mob-req-btn" onclick="mobileShowTab('requirements',this)">
+    <span class="mob-icon">📋</span>需求清单
+    <span class="mob-req-badge" id="mob-req-badge">0</span>
+  </button>
+  <button class="mob-nav-item" onclick="showSessionsPanel()">
+    <span class="mob-icon">💾</span>任务
+  </button>
+</nav>
+
 <!-- ── Update Toast ── -->
 <div id="update-toast"></div>
 
@@ -863,7 +975,12 @@ function applyAIResponse(data, addToHistory) {
   }
 
   if (typeof data.completeness === 'number') setCompleteness(data.completeness);
-  if (data.stage) updateStage(data.stage);
+  if (data.stage) {
+    updateStage(data.stage);
+    updateQuickChips(data.stage); // 手机端快捷回复卡片跟随阶段更新
+  }
+  // 更新手机端需求角标
+  updateMobileReqBadge(currentRequirements.length);
   // 每次对话后自动暂存
   if (addToHistory) autoSave();
 }
@@ -1368,6 +1485,7 @@ async function generateSection(type) {
         showToast('🖥️ 页面展示已生成');
       }
       markPRDStale();
+      updateMobileReqBadge(currentRequirements.length);
     } else {
       setGenBtnState(type, 'idle');
       alert('生成内容为空，请继续对话后再试');
@@ -1922,6 +2040,101 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   } catch(e) {}
 });
+
+// ══════════════════════════════════════════
+// ── 设备选择 & 手机端 (Device & Mobile) ──
+// ══════════════════════════════════════════
+
+// 初始化：读取已存储的设备偏好
+(function initDevice() {
+  const pref = localStorage.getItem('zhaoxi_device');
+  if (pref) {
+    document.getElementById('device-splash').style.display = 'none';
+    if (pref === 'mobile') document.body.classList.add('mobile-mode');
+  }
+})();
+
+function selectDevice(type) {
+  localStorage.setItem('zhaoxi_device', type);
+  document.getElementById('device-splash').style.display = 'none';
+  if (type === 'mobile') document.body.classList.add('mobile-mode');
+  else document.body.classList.remove('mobile-mode');
+}
+
+function switchDevice() {
+  localStorage.removeItem('zhaoxi_device');
+  location.reload();
+}
+
+function isMobile() { return document.body.classList.contains('mobile-mode'); }
+
+// ── 手机端底部导航 ──
+function mobileShowTab(tab, btn) {
+  if (!isMobile()) return;
+  document.querySelectorAll('.mob-nav-item').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const rp = document.getElementById('right-panel');
+  if (tab === 'chat') {
+    rp.classList.remove('mob-open');
+  } else {
+    rp.classList.add('mob-open');
+    if (tab === 'diagram') switchTabById('diagram');
+    else if (tab === 'requirements') switchTabById('requirements');
+  }
+}
+
+function mobileClosePanel() {
+  document.getElementById('right-panel').classList.remove('mob-open');
+  document.querySelectorAll('.mob-nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('mob-chat-btn').classList.add('active');
+}
+
+// 更新手机端需求数量角标
+function updateMobileReqBadge(count) {
+  const badge = document.getElementById('mob-req-badge');
+  if (!badge) return;
+  if (count > 0) { badge.textContent = count; badge.classList.add('show'); }
+  else badge.classList.remove('show');
+}
+
+// ── Grill-Me 快捷回复卡片（手机端专属）──
+// 对应访谈各阶段的朝曦业务场景快捷回复
+const GRILL_CHIPS = {
+  opening: {
+    label: '选择您的业务场景快速开始：',
+    chips: ['税务申报合规系统','股东减持管理平台','家族信托台账','合同审批流程','客户KYC管理','ESG合规报告']
+  },
+  exploring: {
+    label: '常见补充描述：',
+    chips: ['目前用Excel手动处理','需要多级审批流','数据要跨部门共享','涉及境外合规要求','需要自动生成报告','希望移动端可用']
+  },
+  drilling: {
+    label: '追问回应：',
+    chips: ['理解正确，继续','补充一个特殊情况','审批层级再说明下','还有其他使用角色','这个数据来自CRM','有时限要求']
+  },
+  summarizing: {
+    label: '确认与调整：',
+    chips: ['需求描述准确','需要微调某一项','可以开始整理文档','再补充一个场景','优先级需要排序']
+  }
+};
+
+function updateQuickChips(stage) {
+  const container = document.getElementById('quick-chips');
+  if (!container) return;
+  const cfg = GRILL_CHIPS[stage] || GRILL_CHIPS.opening;
+  container.innerHTML = `<span class="chips-label">${cfg.label}</span>` +
+    cfg.chips.map(c => `<button class="chip-btn" onclick="useChip(this,'${c}')">${c}</button>`).join('');
+}
+
+function useChip(btn, text) {
+  const ta = document.getElementById('user-input');
+  ta.value = text;
+  autoResize(ta);
+  ta.focus();
+  // 轻微动效反馈
+  btn.style.background = 'var(--blue-light)';
+  setTimeout(() => btn.style.background = '', 300);
+}
 
 async function copyDoc() {
   const text = document.getElementById('doc-content').textContent;
