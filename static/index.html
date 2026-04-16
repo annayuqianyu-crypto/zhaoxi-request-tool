@@ -349,7 +349,7 @@
   <div id="right-panel">
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('methodology',this)">工具方法论</button>
-      <button class="tab-btn" onclick="switchTab('diagram',this)" id="tab-diagram-btn">业务流程图</button>
+      <button class="tab-btn" onclick="switchTab('diagram',this)" id="tab-diagram-btn">访谈流程</button>
       <button class="tab-btn" onclick="switchTab('requirements',this)" id="tab-req-btn">
         需求清单<span class="req-badge" id="req-count">0</span>
       </button>
@@ -577,7 +577,7 @@
             <span class="gen-icon">🔄</span>
             <div>
               <div class="gen-title">业务流程图</div>
-              <div class="gen-subtitle">可视化展示完整业务操作流程</div>
+              <div class="gen-subtitle">根据需求描述归纳的业务流程，生成需求梳理时自动同步</div>
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -589,7 +589,7 @@
         </div>
         <div class="gen-content-wrap" style="padding:12px;">
           <div id="req-flow-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;display:flex;align-items:center;justify-content:center;overflow:auto;">
-            <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将根据对话生成业务流程图</div>
+            <div class="diagram-placeholder">点击「📝 需求梳理」的「⚡ 生成」后自动同步<br>也可单独点击此处「⚡ 生成」</div>
           </div>
         </div>
       </div>
@@ -1267,7 +1267,9 @@ async function generateSection(type) {
       if (type === 'summary') {
         renderSummaryOnly(data.requirements);
         setGenBtnState(type, 'done');
-        showToast(`📝 已提取 ${data.requirements.length} 条需求`);
+        showToast(`📝 已提取 ${data.requirements.length} 条需求，正在同步生成流程图…`);
+        // 同步触发需求清单→流程图生成
+        generateSection('flowchart');
       } else if (type === 'wireframe') {
         renderWireframeOnly(data.requirements);
         setGenBtnState(type, 'done');
