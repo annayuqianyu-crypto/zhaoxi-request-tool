@@ -7,13 +7,16 @@ from typing import List, Union
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-import anthropic
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = FastAPI()
-client = anthropic.Anthropic()
+client = OpenAI(
+    api_key=os.environ.get("WOLFAI_API_KEY"),
+    base_url="https://wolfai.top/v1"
+)
 
 # ─────────────────────────────────────────────
 # System prompt：Grill-Me 风格 + 结构化需求输出
@@ -236,16 +239,15 @@ async def chat(req: ChatRequest):
     messages.append({"role": "user", "content": req.message})
 
     try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
+        response = client.chat.completions.create(
+            model="gpt-4o",
             max_tokens=2048,
-            system=SYSTEM_PROMPT,
-            messages=messages,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}] + messages,
         )
     except Exception as e:
-        raise HTTPException(500, f"Claude API 错误：{e}")
+        raise HTTPException(500, f"AI API 错误：{e}")
 
-    return parse_ai_response(response.content[0].text)
+    return parse_ai_response(response.choices[0].message.content)
 
 
 @app.post("/api/export")
@@ -294,15 +296,15 @@ async def export_doc(req: ExportRequest):
 要求：专业严谨，结构清晰，可直接交付IT团队进行工作量评估。"""
 
     try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
+        response = client.chat.completions.create(
+            model="gpt-4o",
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
     except Exception as e:
         raise HTTPException(500, f"导出失败：{e}")
 
-    return {"document": response.content[0].text}
+    return {"document": response.choices[0].message.content}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
