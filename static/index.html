@@ -2367,11 +2367,31 @@ const GRILL_CHIPS = {
   opening: {
     label: '选择您的业务场景快速开始：',
     categories: [
-      { title: '数据类', chips: ['客户KYC数据管理','股东持仓台账','家族信托数据归集'] },
-      { title: '流程类', chips: ['合同多级审批流','客户准入审核','跨部门协作工单'] },
-      { title: '合同类', chips: ['合同起草与审批','合同到期提醒','合同变更管理'] },
-      { title: '报告类', chips: ['ESG合规报告','税务申报汇总','监管定期报送'] },
-      { title: '方案类', chips: ['股东减持方案','家族财富规划','境外投资合规'] }
+      { title: '数据类', chips: [
+        { label: '客户KYC数据管理', template: '我们目前用Excel管理客户KYC信息，数据分散、更新不及时，希望做一个统一的客户档案平台，支持信息录入、合规审核和定期复核提醒。' },
+        { label: '股东持仓台账',    template: '公司股东结构比较复杂，持仓和变动记录靠人工维护，想建一个台账系统来追踪每位股东的持股比例、历史变动和相关文件。' },
+        { label: '家族信托数据归集', template: '我们管理多个家族信托架构，资产散落在不同账户和机构，想把所有数据归集到一个平台，实现统一查看和定期对账。' }
+      ]},
+      { title: '流程类', chips: [
+        { label: '合同多级审批流', template: '公司合同审批需要经过多个部门层级，目前靠邮件传递容易出错、进度不透明，想做一套线上多级审批系统，能追踪每个环节的状态。' },
+        { label: '客户准入审核',   template: '新客户入职需要完成背景调查、合规审查等多个步骤，目前流程不统一，想把整个准入流程标准化、线上化，并留存完整的审核记录。' },
+        { label: '跨部门协作工单', template: '各部门之间的协作任务目前没有统一管理，经常遗漏或责任不清，想做一个工单系统来创建任务、指派负责人、跟踪进度和催办。' }
+      ]},
+      { title: '合同类', chips: [
+        { label: '合同起草与审批', template: '我们每月要起草大量合同，希望有模板库可以快速套用，同时支持在线批注、多方审批和电子签署，全流程留痕。' },
+        { label: '合同到期提醒',   template: '公司有很多长期合同，经常忘记到期日或续签节点，希望系统能在关键时间节点前自动提醒对应负责人，避免遗漏。' },
+        { label: '合同变更管理',   template: '合同执行过程中经常发生变更，想记录每次变更的内容、原因和审批记录，形成完整的合同生命周期档案，便于后续审计查阅。' }
+      ]},
+      { title: '报告类', chips: [
+        { label: 'ESG合规报告',  template: '公司需要定期出具ESG报告，目前数据收集分散、整理耗时，希望能自动汇总各部门数据，按监管或披露标准生成结构化报告。' },
+        { label: '税务申报汇总', template: '我们有多个主体需要定期申报税务，数据整理很繁琐，想做一个系统来归集各主体的涉税数据，自动生成申报所需的汇总表格。' },
+        { label: '监管定期报送', template: '我们需要定期向监管机构报送指定格式的数据，目前手工整理耗时且容易出错，希望系统能自动拉取数据并生成符合要求的报送文件。' }
+      ]},
+      { title: '方案类', chips: [
+        { label: '股东减持方案', template: '公司近期有股东计划减持，需要结合税务筹划、锁定期和合规要求制定减持方案，希望有一个系统来管理方案版本、审批和执行进度。' },
+        { label: '家族财富规划', template: '我们需要为高净值客户制定个性化的财富传承方案，涉及信托、保险、境外架构等多种工具，希望有个平台来管理方案、更新和客户沟通记录。' },
+        { label: '境外投资合规', template: '公司在多个境外地区有投资布局，各司法管辖区合规要求不同，希望建一个合规管理平台来追踪各地要求、申报节点和风险预警。' }
+      ]}
     ]
   },
   exploring: {
@@ -2398,13 +2418,13 @@ function updateQuickChips(stage) {
     const cols = cfg.categories.map(cat =>
       `<div class="chips-cat-col">
         <div class="chips-cat-title">${cat.title}</div>
-        ${cat.chips.map(c => `<button class="chip-btn-sm" onclick="useChip(this,${JSON.stringify(c)})">${c}</button>`).join('')}
+        ${cat.chips.map(c => `<button class="chip-btn-sm" onclick="useChip(this,${JSON.stringify(c.template||c)})">${c.label||c}</button>`).join('')}
       </div>`
     ).join('');
     container.innerHTML = `<span class="chips-label">${cfg.label}</span><div class="chips-category-grid">${cols}</div>`;
   } else {
     container.innerHTML = `<span class="chips-label">${cfg.label}</span>` +
-      cfg.chips.map(c => `<button class="chip-btn" onclick="useChip(this,${JSON.stringify(c)})">${c}</button>`).join('');
+      cfg.chips.map(c => `<button class="chip-btn" onclick="useChip(this,${JSON.stringify(c.template||c)})">${c.label||c}</button>`).join('');
   }
 }
 
@@ -2413,6 +2433,8 @@ function useChip(btn, text) {
   ta.value = text;
   autoResize(ta);
   ta.focus();
+  // 光标移到末尾，方便用户继续编辑
+  ta.selectionStart = ta.selectionEnd = ta.value.length;
   // 轻微动效反馈
   btn.style.background = 'var(--blue-light)';
   setTimeout(() => btn.style.background = '', 300);
@@ -2426,7 +2448,7 @@ function initDesktopOpener() {
   grid.innerHTML = cats.map(cat =>
     `<div class="dop-cat-col">
       <div class="dop-cat-title">${cat.title}</div>
-      ${cat.chips.map(c => `<button class="dop-chip" onclick="useDopChip(${JSON.stringify(c)})">${c}</button>`).join('')}
+      ${cat.chips.map(c => `<button class="dop-chip" onclick="useDopChip(${JSON.stringify(c.template||c)})">${c.label||c}</button>`).join('')}
     </div>`
   ).join('');
 }
@@ -2436,6 +2458,8 @@ function useDopChip(text) {
   ta.value = text;
   autoResize(ta);
   ta.focus();
+  // 光标移到末尾，引导用户在模板基础上补充修改后再发送
+  ta.selectionStart = ta.selectionEnd = ta.value.length;
   hideDesktopOpener();
 }
 
