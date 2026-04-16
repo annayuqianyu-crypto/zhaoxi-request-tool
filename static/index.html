@@ -368,6 +368,23 @@
     body.mobile-mode .mob-panel-handle { width:38px; height:4px; background:#cbd5e0; border-radius:2px; }
     body.mobile-mode .tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
     body.mobile-mode .req-subnav { overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
+    /* 手机端 Mermaid 图表自适应宽度修复 */
+    body.mobile-mode #wireframe-diagram-wrap,
+    body.mobile-mode #req-flow-wrap {
+      align-items: flex-start !important;
+      justify-content: flex-start !important;
+      overflow-x: auto;
+      overflow-y: auto;
+      padding: 10px !important;
+    }
+    body.mobile-mode #wireframe-diagram-wrap svg,
+    body.mobile-mode #req-flow-wrap svg {
+      width: 100% !important;
+      height: auto !important;
+      max-width: 100%;
+      min-width: unset !important;
+      transform: none !important;
+    }
 
     /* ── Update Animations ── */
     @keyframes tabPulse { 0%{} 25%{background:#bee3f8;color:var(--navy);box-shadow:0 0 0 3px rgba(43,108,176,.15)} 100%{} }
@@ -1290,7 +1307,18 @@ async function renderMermaidInto(wrapId, id, code, scale) {
     const { svg } = await mermaid.render(id, code);
     wrap.innerHTML = svg;
     const s = wrap.querySelector('svg');
-    if (s) { s.style.transform = `scale(${scale})`; s.style.transformOrigin = 'top center'; }
+    if (s) {
+      if (document.body.classList.contains('mobile-mode')) {
+        // 手机端：撑满容器宽度，高度自适应
+        s.setAttribute('width', '100%');
+        s.style.width = '100%';
+        s.style.height = 'auto';
+        s.style.maxWidth = '100%';
+      } else {
+        s.style.transform = `scale(${scale})`;
+        s.style.transformOrigin = 'top center';
+      }
+    }
   } catch(e) {
     wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图语法有误，继续对话后将自动修正</div>';
   }
@@ -1683,7 +1711,18 @@ async function renderWireframeDiagram(code) {
     const { svg } = await mermaid.render('mmd-wf-' + diagCounter, code);
     wrap.innerHTML = svg;
     const s = wrap.querySelector('svg');
-    if (s) { s.style.transform = `scale(${wireframeScale})`; s.style.transformOrigin = 'top center'; s.style.maxWidth = '100%'; }
+    if (s) {
+      if (document.body.classList.contains('mobile-mode')) {
+        s.setAttribute('width', '100%');
+        s.style.width = '100%';
+        s.style.height = 'auto';
+        s.style.maxWidth = '100%';
+      } else {
+        s.style.transform = `scale(${wireframeScale})`;
+        s.style.transformOrigin = 'top center';
+        s.style.maxWidth = '100%';
+      }
+    }
   } catch(e) {
     wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图渲染失败，AI正在修正中</div>';
   }
@@ -2482,6 +2521,13 @@ async function copyDoc() {
     btn.textContent = '✓ 已复制';
     setTimeout(() => btn.textContent = orig, 2000);
   } catch { alert('请手动复制文本'); }
+}
+
+// 页面加载完成后初始化桌面开场选择器（双保险）
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDesktopOpener);
+} else {
+  initDesktopOpener();
 }
 </script>
 </body>
