@@ -324,10 +324,16 @@
     .mob-switch-btn:hover { background:rgba(255,255,255,.25); }
 
     /* Quick Reply Chips */
-    #quick-chips { display:none; padding:8px 12px 6px; gap:7px; flex-wrap:wrap; border-top:1px solid #edf2f7; background:#fafbfc; flex-shrink:0; }
-    .chip-btn { padding:7px 15px; background:white; border:1.5px solid #bee3f8; border-radius:20px; font-size:13px; color:var(--blue); cursor:pointer; white-space:nowrap; transition:all .18s; font-weight:500; }
+    #quick-chips { display:none; padding:8px 12px 6px; gap:6px; flex-wrap:wrap; border-top:1px solid #edf2f7; background:#fafbfc; flex-shrink:0; }
+    .chip-btn { padding:5px 11px; background:white; border:1.5px solid #bee3f8; border-radius:20px; font-size:11.5px; color:var(--blue); cursor:pointer; white-space:nowrap; transition:all .18s; font-weight:500; }
     .chip-btn:hover { background:var(--blue-light); border-color:var(--blue); transform:scale(1.03); }
     .chips-label { font-size:11px; color:#a0aec0; width:100%; margin-bottom:2px; }
+    /* 分类场景选择器 */
+    .chips-category-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; width:100%; }
+    .chips-cat-col { display:flex; flex-direction:column; gap:4px; }
+    .chips-cat-title { font-size:10px; font-weight:700; color:#718096; letter-spacing:.5px; padding:2px 4px; background:#edf2f7; border-radius:4px; text-align:center; margin-bottom:1px; }
+    .chip-btn-sm { padding:4px 6px; background:white; border:1px solid #bee3f8; border-radius:8px; font-size:10.5px; color:#2b6cb0; cursor:pointer; transition:all .15s; text-align:center; line-height:1.3; white-space:normal; }
+    .chip-btn-sm:hover { background:#ebf8ff; border-color:#4299e1; }
 
     /* body.mobile-mode overrides */
     body.mobile-mode header { padding:0 12px; height:50px; }
@@ -2341,7 +2347,13 @@ function updateMobileReqBadge(count) {
 const GRILL_CHIPS = {
   opening: {
     label: '选择您的业务场景快速开始：',
-    chips: ['税务申报合规系统','股东减持管理平台','家族信托台账','合同审批流程','客户KYC管理','ESG合规报告']
+    categories: [
+      { title: '数据类', chips: ['客户KYC数据管理','股东持仓台账','家族信托数据归集'] },
+      { title: '流程类', chips: ['合同多级审批流','客户准入审核','跨部门协作工单'] },
+      { title: '合同类', chips: ['合同起草与审批','合同到期提醒','合同变更管理'] },
+      { title: '报告类', chips: ['ESG合规报告','税务申报汇总','监管定期报送'] },
+      { title: '方案类', chips: ['股东减持方案','家族财富规划','境外投资合规'] }
+    ]
   },
   exploring: {
     label: '常见补充描述：',
@@ -2361,8 +2373,20 @@ function updateQuickChips(stage) {
   const container = document.getElementById('quick-chips');
   if (!container) return;
   const cfg = GRILL_CHIPS[stage] || GRILL_CHIPS.opening;
-  container.innerHTML = `<span class="chips-label">${cfg.label}</span>` +
-    cfg.chips.map(c => `<button class="chip-btn" onclick="useChip(this,'${c}')">${c}</button>`).join('');
+
+  if (cfg.categories) {
+    // 分类网格布局（opening 阶段）
+    const cols = cfg.categories.map(cat =>
+      `<div class="chips-cat-col">
+        <div class="chips-cat-title">${cat.title}</div>
+        ${cat.chips.map(c => `<button class="chip-btn-sm" onclick="useChip(this,${JSON.stringify(c)})">${c}</button>`).join('')}
+      </div>`
+    ).join('');
+    container.innerHTML = `<span class="chips-label">${cfg.label}</span><div class="chips-category-grid">${cols}</div>`;
+  } else {
+    container.innerHTML = `<span class="chips-label">${cfg.label}</span>` +
+      cfg.chips.map(c => `<button class="chip-btn" onclick="useChip(this,${JSON.stringify(c)})">${c}</button>`).join('');
+  }
 }
 
 function useChip(btn, text) {
