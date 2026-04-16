@@ -4,7 +4,7 @@ import io
 import os
 from typing import List, Union
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
@@ -131,6 +131,12 @@ class ExportRequest(BaseModel):
     history: List[Message]
     requirements: List[Union[dict, str]]
     mermaid: str
+
+
+class WordExportReq(BaseModel):
+    type: str  # "requirements" or "prd"
+    requirements: List[Union[dict, str]] = []
+    prd_text: str = ""
 
 
 class GenerateRequest(BaseModel):
@@ -412,6 +418,110 @@ async def generate_section(req: GenerateRequest):
         return {"type": req.type, "requirements": [], "mermaid": ""}
 
     raise HTTPException(400, "未知生成类型")
+
+
+@app.post("/api/export/word")
+async def export_word(req: WordExportReq):
+    from docx import Document
+    from docx.shared import Pt, RGBColor, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    import urllib.parse
+
+    doc = Document()
+
+    # 设置文档默认字体
+    style = doc.styles['Normal']
+    style.font.name = '微软雅黑'
+    style.font.size = Pt(11)
+
+    if req.type == "requirements":
+        # 标题
+        title = doc.add_heading('需求梳理报告', 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f'生成时间：{__import__("datetime").datetime.now().strftime("%Y年%m月%d日 %H:%M")}').alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph('')
+
+        for i, r in enumerate(req.requirements):
+            if isinstance(r, str):
+                doc.add_heading(f'{i+1}. {r}', 2)
+                continue
+            # 功能标题
+            h = doc.add_heading(f'{i+1}. {r.get("module","功能")} · {r.get("feature","")}', 1)
+            # 功能说明
+            p = doc.add_paragraph()
+            p.add_run('功能说明：').bold = True
+            p.add_run(r.get('description', ''))
+            # 处理流程
+            if r.get('process'):
+                doc.add_paragraph().add_run('处理流程：').bold = True
+                for j, step in enumerate(r['process']):
+                    doc.add_paragraph(f'{j+1}. {step}', style='List Number')
+            # 输入输出
+            if r.get('inputs'):
+                p2 = doc.add_paragraph()
+                p2.add_run('输入数据：').bold = True
+                p2.add_run('、'.join(r['inputs']))
+            if r.get('outputs'):
+                p3 = doc.add_paragraph()
+                p3.add_run('输出结果：').bold = True
+                p3.add_run('、'.join(r['outputs']))
+            # 界面草图
+            if r.get('wireframe'):
+                p4 = doc.add_paragraph()
+                p4.add_run('界面布局：').bold = True
+                p4.add_run(r['wireframe'])
+            doc.add_paragraph('─' * 40)
+
+        filename = '需求梳理报告.docx'
+
+    elif req.type == "prd":
+        # 解析 markdown 格式的 PRD 文本
+        lines = req.prd_text.split('\n')
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                doc.add_paragraph('')
+                continue
+            if line_stripped.startswith('# '):
+                h = doc.add_heading(line_stripped[2:], 0)
+                h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            elif line_stripped.startswith('## '):
+                doc.add_heading(line_stripped[3:], 1)
+            elif line_stripped.startswith('### '):
+                doc.add_heading(line_stripped[4:], 2)
+            elif line_stripped.startswith('#### '):
+                doc.add_heading(line_stripped[5:], 3)
+            elif line_stripped.startswith(('- ', '* ', '• ')):
+                doc.add_paragraph(line_stripped[2:], style='List Bullet')
+            elif line_stripped and line_stripped[0].isdigit() and '. ' in line_stripped[:4]:
+                doc.add_paragraph(line_stripped, style='List Number')
+            elif line_stripped.startswith('**') and line_stripped.endswith('**'):
+                p = doc.add_paragraph()
+                p.add_run(line_stripped.strip('*')).bold = True
+            else:
+                # 处理行内加粗 **text**
+                p = doc.add_paragraph()
+                import re as _re
+                parts = _re.split(r'\*\*(.+?)\*\*', line_stripped)
+                for k, part in enumerate(parts):
+                    run = p.add_run(part)
+                    if k % 2 == 1:
+                        run.bold = True
+
+        filename = 'PRD需求规格说明书.docx'
+    else:
+        raise HTTPException(400, "未知导出类型")
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+
+    encoded = urllib.parse.quote(filename)
+    return Response(
+        content=buffer.getvalue(),
+        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        headers={'Content-Disposition': f"attachment; filename*=UTF-8''{encoded}"}
+    )
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

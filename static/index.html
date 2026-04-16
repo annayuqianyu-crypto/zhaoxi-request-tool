@@ -287,6 +287,13 @@
     .session-req-count { background:#ebf4ff; color:var(--blue); padding:1px 7px; border-radius:8px; font-weight:600; }
     .session-current-badge { background:#48bb78; color:white; font-size:10px; padding:1px 7px; border-radius:8px; font-weight:700; }
 
+    /* ── Export Buttons ── */
+    .export-btn-group { display:flex; gap:5px; align-items:center; }
+    .exp-btn { padding:4px 10px; font-size:11px; font-weight:600; border:1px solid var(--border); border-radius:6px; background:white; color:#4a5568; cursor:pointer; transition:all .2s; white-space:nowrap; }
+    .exp-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-light); }
+    .exp-btn.exp-word { border-color:#38a169; color:#38a169; }
+    .exp-btn.exp-word:hover { background:#f0fff4; }
+
     /* ── Update Animations ── */
     @keyframes tabPulse { 0%{} 25%{background:#bee3f8;color:var(--navy);box-shadow:0 0 0 3px rgba(43,108,176,.15)} 100%{} }
     .tab-btn.flash-update { animation: tabPulse 1s ease; }
@@ -554,7 +561,12 @@
               <div class="gen-subtitle">从对话中提取结构化功能需求清单</div>
             </div>
           </div>
-          <button class="gen-btn" id="gen-summary-btn" onclick="generateSection('summary')">⚡ 生成</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div class="export-btn-group">
+              <button class="exp-btn exp-word" onclick="exportRequirementsWord()" title="导出Word文档">📥 Word</button>
+            </div>
+            <button class="gen-btn" id="gen-summary-btn" onclick="generateSection('summary')">⚡ 生成</button>
+          </div>
         </div>
         <div class="gen-content-wrap">
           <div id="summary-list">
@@ -573,7 +585,11 @@
               <div class="gen-subtitle">多方案路径 · 交互节点 · 判断分支，IT人员可直接使用</div>
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div class="export-btn-group">
+              <button class="exp-btn" onclick="exportWireframePNG()" title="导出PNG图片">📷 图片</button>
+              <button class="exp-btn" onclick="exportWireframeMermaid()" title="导出Mermaid代码">📝 代码</button>
+            </div>
             <button class="diagram-tool-btn" onclick="zoomWireframe(0.2)">＋</button>
             <button class="diagram-tool-btn" onclick="zoomWireframe(-0.2)">－</button>
             <button class="diagram-tool-btn" onclick="resetWireframeZoom()">适应</button>
@@ -597,7 +613,13 @@
               <div class="gen-subtitle">仿真系统界面，直观呈现页面样式</div>
             </div>
           </div>
-          <button class="gen-btn" id="gen-preview-btn" onclick="generateSection('preview')">⚡ 生成</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div class="export-btn-group">
+              <button class="exp-btn" onclick="exportPreviewImage()" title="导出页面截图">📷 图片</button>
+              <button class="exp-btn" onclick="exportPreviewText()" title="导出文本说明">📄 文本</button>
+            </div>
+            <button class="gen-btn" id="gen-preview-btn" onclick="generateSection('preview')">⚡ 生成</button>
+          </div>
         </div>
         <div class="gen-content-wrap">
           <div id="preview-list">
@@ -616,7 +638,11 @@
               <div class="gen-subtitle">根据需求描述归纳的业务流程，生成需求梳理时自动同步</div>
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div class="export-btn-group">
+              <button class="exp-btn" onclick="exportFlowchartPNG()" title="导出PNG图片">📷 图片</button>
+              <button class="exp-btn" onclick="exportFlowchartMermaid()" title="导出Mermaid代码">📝 代码</button>
+            </div>
             <button class="diagram-tool-btn" onclick="zoomReqDiagram(0.2)">＋</button>
             <button class="diagram-tool-btn" onclick="zoomReqDiagram(-0.2)">－</button>
             <button class="diagram-tool-btn" onclick="resetReqZoom()">适应</button>
@@ -640,7 +666,12 @@
               <div class="gen-subtitle">包含9个章节，可直接交付IT团队</div>
             </div>
           </div>
-          <button class="gen-btn" id="gen-prd-btn" onclick="generatePRDInline()">⚡ 生成</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div class="export-btn-group">
+              <button class="exp-btn exp-word" onclick="exportPRDWord()" title="导出可编辑Word文档">📥 Word</button>
+            </div>
+            <button class="gen-btn" id="gen-prd-btn" onclick="generatePRDInline()">⚡ 生成</button>
+          </div>
         </div>
         <div class="gen-content-wrap">
           <div id="prd-empty-tip" style="text-align:center;padding:32px 10px;">
@@ -705,6 +736,7 @@
 let history = [];
 let currentMermaid = '';
 let currentRequirements = [];
+let currentWireframeMermaid = '';
 let completeness = 0;
 let isLoading = false;
 let diagramScale = 1;
@@ -1359,6 +1391,7 @@ function renderSummaryOnly(list) {
 // 线框图（功能流程设计图）专属渲染
 let wireframeScale = 1;
 async function renderWireframeDiagram(code) {
+  currentWireframeMermaid = code;
   diagCounter++;
   const wrap = document.getElementById('wireframe-diagram-wrap');
   if (!wrap) return;
@@ -1531,6 +1564,148 @@ async function startExport() {
 
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 function closeModalOnOverlay(e) { if (e.target===document.getElementById('modal-overlay')) closeModal(); }
+
+// ══════════════════════════════════════════
+// ── 导出功能 (Export Functions) ──
+// ══════════════════════════════════════════
+
+// 通用：下载文本/二进制文件
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function downloadText(content, filename) {
+  downloadBlob(new Blob([content], { type: 'text/plain;charset=utf-8' }), filename);
+}
+
+// SVG → PNG（通用）
+async function exportSVGasPNG(wrapId, filename) {
+  const wrap = document.getElementById(wrapId);
+  const svg = wrap ? wrap.querySelector('svg') : null;
+  if (!svg) { alert('请先生成图表后再导出'); return; }
+  const bbox = svg.getBoundingClientRect();
+  const W = Math.max(bbox.width, 600), H = Math.max(bbox.height, 400);
+  const cloned = svg.cloneNode(true);
+  cloned.setAttribute('width', W); cloned.setAttribute('height', H);
+  // 内联所有样式（确保导出时样式正确）
+  const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(cloned);
+  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = W * scale; canvas.height = H * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(pngBlob => { downloadBlob(pngBlob, filename); resolve(); }, 'image/png');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG渲染失败')); };
+    img.src = url;
+  });
+  showToast('📷 图片已下载：' + filename);
+}
+
+// ── 流程图导出 ──
+function exportFlowchartPNG() { exportSVGasPNG('req-flow-wrap', '业务流程图.png').catch(e => alert(e.message)); }
+function exportFlowchartMermaid() {
+  if (!currentMermaid) { alert('请先生成流程图'); return; }
+  downloadText(currentMermaid, '业务流程图.mmd');
+  showToast('📝 Mermaid代码已下载');
+}
+
+// ── 线框图（功能流程设计图）导出 ──
+function exportWireframePNG() { exportSVGasPNG('wireframe-diagram-wrap', '功能流程设计图.png').catch(e => alert(e.message)); }
+function exportWireframeMermaid() {
+  if (!currentWireframeMermaid) { alert('请先生成功能流程设计图'); return; }
+  downloadText(currentWireframeMermaid, '功能流程设计图.mmd');
+  showToast('📝 Mermaid代码已下载');
+}
+
+// ── 需求梳理 Word 导出 ──
+async function exportRequirementsWord() {
+  if (!currentRequirements.length) { alert('请先生成需求梳理内容'); return; }
+  showToast('⏳ 正在生成Word文档…');
+  try {
+    const resp = await fetch('/api/export/word', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'requirements', requirements: currentRequirements, prd_text: '' })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    downloadBlob(await resp.blob(), '需求梳理报告.docx');
+    showToast('📥 需求梳理Word已下载');
+  } catch(e) { alert('导出失败：' + e.message); }
+}
+
+// ── 页面展示导出 ──
+async function exportPreviewImage() {
+  const container = document.getElementById('preview-list');
+  if (!container || !container.querySelector('.page-mock-wrap')) { alert('请先生成页面展示内容'); return; }
+  // 懒加载 html2canvas
+  if (!window.html2canvas) {
+    showToast('⏳ 正在加载截图组件…');
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('截图组件加载失败，请检查网络'));
+      document.head.appendChild(s);
+    }).catch(e => { alert(e.message); return Promise.reject(e); });
+  }
+  showToast('⏳ 正在截图…');
+  try {
+    const canvas = await html2canvas(container, { backgroundColor:'#f7f8fa', scale:2, useCORS:true, logging:false, scrollX:0, scrollY:0 });
+    canvas.toBlob(blob => { downloadBlob(blob, '页面展示.png'); showToast('📷 页面展示截图已下载'); }, 'image/png');
+  } catch(e) { alert('截图失败：' + e.message); }
+}
+
+function exportPreviewText() {
+  if (!currentRequirements.length) { alert('请先生成页面展示内容'); return; }
+  let text = '朝曦需求打磨工作台 · 页面展示说明\n';
+  text += `生成时间：${new Date().toLocaleString('zh-CN')}\n`;
+  text += '═'.repeat(55) + '\n\n';
+  let count = 0;
+  currentRequirements.forEach((req, i) => {
+    if (typeof req !== 'object') return;
+    count++;
+    text += `【${count}】${req.module || '功能'} · ${req.feature || ''}\n`;
+    text += '─'.repeat(40) + '\n';
+    if (req.description) text += `功能说明：${req.description}\n\n`;
+    if (req.wireframe)   text += `页面布局：\n${req.wireframe}\n\n`;
+    if (req.inputs?.length)  text += `输入数据：${req.inputs.join('、')}\n`;
+    if (req.outputs?.length) text += `输出结果：${req.outputs.join('、')}\n`;
+    if (req.process?.length) {
+      text += `操作步骤：\n`;
+      req.process.forEach((s, j) => text += `  ${j+1}. ${s}\n`);
+    }
+    text += '\n';
+  });
+  if (!count) { alert('暂无包含布局说明的需求，请先生成线框图再导出'); return; }
+  downloadText(text, '页面展示说明.txt');
+  showToast('📄 文本说明已下载');
+}
+
+// ── PRD Word 导出 ──
+async function exportPRDWord() {
+  const prdText = document.getElementById('prd-inline-content')?.textContent?.trim();
+  if (!prdText) { alert('请先生成PRD文档，再点击导出'); return; }
+  showToast('⏳ 正在生成Word文档…');
+  try {
+    const resp = await fetch('/api/export/word', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'prd', requirements: [], prd_text: prdText })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    downloadBlob(await resp.blob(), 'PRD需求规格说明书.docx');
+    showToast('📥 PRD Word已下载');
+  } catch(e) { alert('导出失败：' + e.message); }
+}
 
 // ══════════════════════════════════════════
 // ── 会话管理 (Session Management) ──
