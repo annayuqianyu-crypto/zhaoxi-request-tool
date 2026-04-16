@@ -167,12 +167,11 @@
     .req-io-item::before { content:'›'; color:var(--blue); font-weight:700; }
 
     /* ── Requirements sub-tabs ── */
-    .req-subnav { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+    .req-subnav { display:flex; gap:6px; margin-bottom:0; padding:10px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; background:white; flex-shrink:0; }
     .req-subbtn { padding:5px 14px; font-size:12px; font-weight:600; border:1.5px solid var(--border); border-radius:20px; background:white; color:#718096; cursor:pointer; transition:all .2s; white-space:nowrap; }
     .req-subbtn.active { background:var(--navy); color:white; border-color:var(--navy); }
     .req-subbtn:hover:not(.active) { border-color:var(--blue); color:var(--blue); }
-    .req-sub { display:none; }
-    .req-sub.active { display:block; }
+    /* req-sub layout overridden below in gen-header section */
 
     /* Summary list */
     .summary-item { background:white; border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; animation:fadeUp .3s ease; }
@@ -245,6 +244,21 @@
     .pm-stat-card { background:white; border:1px solid var(--border); border-radius:6px; padding:10px 12px; }
     .pm-stat-num { font-size:20px; font-weight:700; color:var(--navy); }
     .pm-stat-label { font-size:10px; color:#718096; margin-top:2px; }
+
+    /* ── Generate Button Toolbar ── */
+    .gen-header { display:flex; align-items:center; justify-content:space-between; padding:11px 16px; border-bottom:1px solid var(--border); background:#fafbfc; flex-shrink:0; }
+    .gen-header-left { display:flex; align-items:center; gap:10px; }
+    .gen-icon { font-size:18px; line-height:1; }
+    .gen-title { font-size:13px; font-weight:700; color:var(--navy); }
+    .gen-subtitle { font-size:11px; color:#a0aec0; margin-top:1px; }
+    .gen-btn { padding:6px 15px; background:var(--navy); color:white; border:none; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; transition:all .2s; white-space:nowrap; display:flex; align-items:center; gap:5px; }
+    .gen-btn:hover:not(:disabled) { background:#2a4a7f; transform:translateY(-1px); box-shadow:0 3px 10px rgba(26,54,93,.25); }
+    .gen-btn:disabled { background:#a0aec0; cursor:not-allowed; transform:none; box-shadow:none; }
+    .gen-btn.has-content { background:#38a169; }
+    .gen-btn.has-content:hover:not(:disabled) { background:#2f855a; }
+    .gen-content-wrap { flex:1; overflow-y:auto; padding:14px 16px; }
+    .req-sub { display:none; flex-direction:column; height:100%; }
+    .req-sub.active { display:flex; }
 
     /* ── Update Animations ── */
     @keyframes tabPulse { 0%{} 25%{background:#bee3f8;color:var(--navy);box-shadow:0 0 0 3px rgba(43,108,176,.15)} 100%{} }
@@ -499,57 +513,114 @@
         <button class="req-subbtn" onclick="switchReqSub('prd',this)">📄 PRD文档</button>
       </div>
 
-      <!-- 需求梳理 -->
+      <!-- 📝 需求梳理 -->
       <div id="req-sub-summary" class="req-sub active">
-        <div id="summary-list">
-          <div class="req-empty">需求梳理内容将随访谈进度在此积累<br><span style="font-size:12px;color:#cbd5e0">便于业务团队逐条复查确认</span></div>
-        </div>
-      </div>
-
-      <!-- 线框图 -->
-      <div id="req-sub-wireframe" class="req-sub">
-        <div id="wireframe-list">
-          <div class="req-empty">界面线框图将在访谈过程中逐步生成<br><span style="font-size:12px;color:#cbd5e0">每个功能点对应一张页面草图</span></div>
-        </div>
-      </div>
-
-      <!-- 页面展示 -->
-      <div id="req-sub-preview" class="req-sub">
-        <div id="preview-list">
-          <div class="req-empty">页面模拟图将随需求积累自动生成<br><span style="font-size:12px;color:#cbd5e0">每个功能页面以仿真界面形式呈现</span></div>
-        </div>
-      </div>
-
-      <!-- 流程图 -->
-      <div id="req-sub-flowchart" class="req-sub">
-        <div class="diagram-toolbar">
-          <button class="diagram-tool-btn" onclick="zoomReqDiagram(0.2)">放大 +</button>
-          <button class="diagram-tool-btn" onclick="zoomReqDiagram(-0.2)">缩小 −</button>
-          <button class="diagram-tool-btn" onclick="resetReqZoom()">适应屏幕</button>
-        </div>
-        <div id="req-flow-wrap" style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;min-height:200px;display:flex;align-items:center;justify-content:center;overflow:auto;">
-          <div class="diagram-placeholder">开始对话后，流程图将在此同步显示</div>
-        </div>
-      </div>
-
-      <!-- PRD文档 -->
-      <div id="req-sub-prd" class="req-sub">
-        <div id="prd-prompt-box" style="text-align:center;padding:32px 20px;">
-          <div style="font-size:40px;margin-bottom:12px;">📄</div>
-          <p style="font-size:14px;color:#4a5568;margin:0 0 8px;font-weight:600;">PRD需求规格说明书</p>
-          <p style="font-size:13px;color:#718096;margin:0 0 20px;line-height:1.7;">访谈完成后，点击生成完整PRD文档<br>包含背景、角色、流程、功能清单、验收标准等9个章节<br>可直接交付IT开发团队进行工作量评估</p>
-          <button id="gen-prd-btn" onclick="generatePRDInline()" style="padding:10px 28px;background:var(--navy);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;" onmouseover="this.style.background='#2a4a7f'" onmouseout="this.style.background='var(--navy)'">生成PRD文档</button>
-        </div>
-        <div id="prd-result-box" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:13px;font-weight:600;color:var(--navy);">📄 已生成需求规格说明书</span>
-            <div style="display:flex;gap:8px;">
-              <button onclick="regeneratePRD()" style="padding:5px 12px;font-size:12px;background:#edf2f7;border:none;border-radius:6px;cursor:pointer;color:#4a5568;">重新生成</button>
-              <button onclick="copyPRDContent()" style="padding:5px 12px;font-size:12px;background:var(--navy);color:white;border:none;border-radius:6px;cursor:pointer;">复制全文</button>
+        <div class="gen-header">
+          <div class="gen-header-left">
+            <span class="gen-icon">📝</span>
+            <div>
+              <div class="gen-title">需求梳理</div>
+              <div class="gen-subtitle">从对话中提取结构化功能需求清单</div>
             </div>
           </div>
-          <div style="background:white;border:1px solid var(--border);border-radius:10px;padding:20px;max-height:520px;overflow-y:auto;">
-            <pre id="prd-inline-content" style="font-size:13px;line-height:1.75;color:#2d3748;white-space:pre-wrap;margin:0;font-family:inherit;"></pre>
+          <button class="gen-btn" id="gen-summary-btn" onclick="generateSection('summary')">⚡ 生成</button>
+        </div>
+        <div class="gen-content-wrap">
+          <div id="summary-list">
+            <div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求<br><span style="font-size:12px;color:#cbd5e0">对话进行中也可随时生成</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 📐 线框图 -->
+      <div id="req-sub-wireframe" class="req-sub">
+        <div class="gen-header">
+          <div class="gen-header-left">
+            <span class="gen-icon">📐</span>
+            <div>
+              <div class="gen-title">界面线框图</div>
+              <div class="gen-subtitle">为每个功能生成页面布局描述</div>
+            </div>
+          </div>
+          <button class="gen-btn" id="gen-wireframe-btn" onclick="generateSection('wireframe')">⚡ 生成</button>
+        </div>
+        <div class="gen-content-wrap">
+          <div id="wireframe-list">
+            <div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将为每个功能点生成界面草图描述<br><span style="font-size:12px;color:#cbd5e0">包含顶部/中部/底部布局说明</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🖥️ 页面展示 -->
+      <div id="req-sub-preview" class="req-sub">
+        <div class="gen-header">
+          <div class="gen-header-left">
+            <span class="gen-icon">🖥️</span>
+            <div>
+              <div class="gen-title">页面模拟展示</div>
+              <div class="gen-subtitle">仿真系统界面，直观呈现页面样式</div>
+            </div>
+          </div>
+          <button class="gen-btn" id="gen-preview-btn" onclick="generateSection('preview')">⚡ 生成</button>
+        </div>
+        <div class="gen-content-wrap">
+          <div id="preview-list">
+            <div class="req-empty">点击右上角「⚡ 生成」按钮<br>每个功能以仿真浏览器界面展示<br><span style="font-size:12px;color:#cbd5e0">建议先生成线框图再生成页面展示</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🔄 流程图 -->
+      <div id="req-sub-flowchart" class="req-sub">
+        <div class="gen-header">
+          <div class="gen-header-left">
+            <span class="gen-icon">🔄</span>
+            <div>
+              <div class="gen-title">业务流程图</div>
+              <div class="gen-subtitle">可视化展示完整业务操作流程</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="diagram-tool-btn" onclick="zoomReqDiagram(0.2)">＋</button>
+            <button class="diagram-tool-btn" onclick="zoomReqDiagram(-0.2)">－</button>
+            <button class="diagram-tool-btn" onclick="resetReqZoom()">适应</button>
+            <button class="gen-btn" id="gen-flowchart-btn" onclick="generateSection('flowchart')">⚡ 生成</button>
+          </div>
+        </div>
+        <div class="gen-content-wrap" style="padding:12px;">
+          <div id="req-flow-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;display:flex;align-items:center;justify-content:center;overflow:auto;">
+            <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将根据对话生成业务流程图</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 📄 PRD文档 -->
+      <div id="req-sub-prd" class="req-sub">
+        <div class="gen-header">
+          <div class="gen-header-left">
+            <span class="gen-icon">📄</span>
+            <div>
+              <div class="gen-title">PRD需求规格说明书</div>
+              <div class="gen-subtitle">包含9个章节，可直接交付IT团队</div>
+            </div>
+          </div>
+          <button class="gen-btn" id="gen-prd-btn" onclick="generatePRDInline()">⚡ 生成</button>
+        </div>
+        <div class="gen-content-wrap">
+          <div id="prd-empty-tip" style="text-align:center;padding:32px 10px;">
+            <p style="font-size:13px;color:#718096;margin:0 0 6px;line-height:1.7;">点击右上角「⚡ 生成」生成完整PRD文档<br>包含项目背景、角色权限、功能清单、验收标准等</p>
+          </div>
+          <div id="prd-result-box" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <span style="font-size:13px;font-weight:600;color:var(--navy);">📄 已生成需求规格说明书</span>
+              <div style="display:flex;gap:8px;">
+                <button onclick="regeneratePRD()" style="padding:5px 12px;font-size:12px;background:#edf2f7;border:none;border-radius:6px;cursor:pointer;color:#4a5568;">重新生成</button>
+                <button onclick="copyPRDContent()" style="padding:5px 12px;font-size:12px;background:var(--navy);color:white;border:none;border-radius:6px;cursor:pointer;">复制全文</button>
+              </div>
+            </div>
+            <div style="background:white;border:1px solid var(--border);border-radius:10px;padding:20px;max-height:480px;overflow-y:auto;">
+              <pre id="prd-inline-content" style="font-size:13px;line-height:1.75;color:#2d3748;white-space:pre-wrap;margin:0;font-family:inherit;"></pre>
+            </div>
           </div>
         </div>
       </div>
@@ -669,19 +740,17 @@ function applyAIResponse(data, addToHistory) {
   addMessage('ai', msg);
   if (addToHistory) history.push({ role: 'assistant', content: msg });
 
-  // ── 流程图：每次对话后必定更新渲染 ──
+  // ── 流程图 ──
   if (data.mermaid) currentMermaid = data.mermaid;
-  if (currentMermaid) {
-    renderDiagram(currentMermaid);
-    if (addToHistory) {
-      flashTab('diagram');
-      // 让流程图容器有发光感
-      setTimeout(() => {
-        const wrap = document.getElementById('diagram-wrap');
-        if (wrap) { wrap.classList.remove('diagram-glow'); void wrap.offsetWidth; wrap.classList.add('diagram-glow'); }
-      }, 300);
-      showToast('📊 流程图已更新');
-    }
+  if (!addToHistory && currentMermaid) {
+    // 初始化：仅渲染到"业务流程图"Tab，锁定不变
+    renderMainDiagram(currentMermaid);
+  }
+  // 对话流程图（需求清单→流程图）：有新内容时自动同步
+  if (addToHistory && currentMermaid) {
+    renderConvDiagram(currentMermaid);
+    flashTab('diagram');
+    showToast('📊 流程图已更新');
   }
 
   // ── 需求清单：累积并每次刷新所有板块 ──
@@ -821,11 +890,25 @@ function setCompleteness(pct) {
 // ── Diagram ──
 let diagCounter = 0;
 let reqDiagramScale = 1;
+let mainDiagramLocked = false; // 业务流程图 Tab 仅渲染一次，永不覆盖
 
-async function renderDiagram(code) {
+// 仅渲染到右侧"业务流程图"Tab（只调用一次）
+async function renderMainDiagram(code) {
+  if (mainDiagramLocked) return;
   diagCounter++;
   await renderMermaidInto('diagram-wrap', 'mmd-main-'+diagCounter, code, diagramScale);
+  mainDiagramLocked = true;
+}
+
+// 渲染到需求清单→流程图（每次对话都更新）
+async function renderConvDiagram(code) {
+  diagCounter++;
   await renderMermaidInto('req-flow-wrap', 'mmd-req-'+diagCounter, code, reqDiagramScale);
+}
+
+// 兼容旧调用
+async function renderDiagram(code) {
+  await renderConvDiagram(code);
 }
 
 async function renderMermaidInto(wrapId, id, code, scale) {
@@ -1147,11 +1230,88 @@ function mockCellValue(col, row) {
   return `—`;
 }
 
-// ── PRD inline generation ──
+// ── 通用生成按钮逻辑 ──
+function setGenBtnState(type, state) {
+  // state: 'idle' | 'loading' | 'done'
+  const ids = { summary:'gen-summary-btn', wireframe:'gen-wireframe-btn', preview:'gen-preview-btn', flowchart:'gen-flowchart-btn', prd:'gen-prd-btn' };
+  const labels = { summary:'⚡ 生成', wireframe:'⚡ 生成', preview:'⚡ 生成', flowchart:'⚡ 生成', prd:'⚡ 生成' };
+  const btn = document.getElementById(ids[type]);
+  if (!btn) return;
+  if (state === 'loading') { btn.textContent = '生成中…'; btn.disabled = true; btn.classList.remove('has-content'); }
+  else if (state === 'done') { btn.textContent = '⟳ 重新生成'; btn.disabled = false; btn.classList.add('has-content'); }
+  else { btn.textContent = labels[type]||'⚡ 生成'; btn.disabled = false; btn.classList.remove('has-content'); }
+}
+
+async function generateSection(type) {
+  if (!history.length) { alert('请先开始对话，再生成需求内容'); return; }
+  setGenBtnState(type, 'loading');
+  try {
+    if (type === 'prd') {
+      await generatePRDInline(); return;
+    }
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history, requirements: currentRequirements, type })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+
+    if (type === 'flowchart' && data.mermaid) {
+      currentMermaid = data.mermaid;
+      await renderConvDiagram(data.mermaid);
+      setGenBtnState(type, 'done');
+      showToast('🔄 流程图已生成');
+    } else if (data.requirements && data.requirements.length) {
+      currentRequirements = data.requirements;
+      if (type === 'summary') {
+        renderSummaryOnly(data.requirements);
+        setGenBtnState(type, 'done');
+        showToast(`📝 已提取 ${data.requirements.length} 条需求`);
+      } else if (type === 'wireframe') {
+        renderWireframeOnly(data.requirements);
+        setGenBtnState(type, 'done');
+        showToast('📐 线框图已生成');
+      } else if (type === 'preview') {
+        renderRequirementsPreview(data.requirements);
+        setGenBtnState(type, 'done');
+        showToast('🖥️ 页面展示已生成');
+      }
+      markPRDStale();
+    } else {
+      setGenBtnState(type, 'idle');
+      alert('生成内容为空，请继续对话后再试');
+    }
+  } catch(e) {
+    setGenBtnState(type, 'idle');
+    alert('生成失败：' + e.message);
+  }
+}
+
+function renderSummaryOnly(list) {
+  const el = document.getElementById('summary-list');
+  el.innerHTML = '';
+  if (!list.length) { el.innerHTML = '<div class="req-empty">暂无已确认需求</div>'; return; }
+  list.forEach((req, i) => typeof req === 'string'
+    ? (() => { const d=document.createElement('div'); d.className='summary-item'; d.innerHTML=`<div class="summary-header"><span class="summary-feature">${esc(req)}</span></div>`; el.appendChild(d); })()
+    : renderSummaryItem(el, req, i));
+  document.getElementById('req-count').textContent = list.length;
+}
+
+function renderWireframeOnly(list) {
+  const el = document.getElementById('wireframe-list');
+  el.innerHTML = '';
+  const withWF = list.filter(r => typeof r === 'object' && r.wireframe);
+  if (!withWF.length) { el.innerHTML = '<div class="req-empty">暂无界面草图信息<br><span style="font-size:12px;color:#cbd5e0">请先生成需求梳理</span></div>'; return; }
+  withWF.forEach((req, i) => renderWireframeItem(el, req, i));
+}
+
+// ── PRD 生成 ──
 async function generatePRDInline() {
   clearPRDStale();
   const btn = document.getElementById('gen-prd-btn');
   btn.textContent = '生成中…'; btn.disabled = true;
+  document.getElementById('prd-empty-tip').style.display = 'none';
   try {
     const resp = await fetch('/api/export', {
       method: 'POST',
@@ -1161,18 +1321,19 @@ async function generatePRDInline() {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     document.getElementById('prd-inline-content').textContent = data.document || '';
-    document.getElementById('prd-prompt-box').style.display = 'none';
     document.getElementById('prd-result-box').style.display = 'block';
+    setGenBtnState('prd', 'done');
+    showToast('📄 PRD文档已生成');
   } catch(e) {
-    btn.textContent = '生成PRD文档'; btn.disabled = false;
+    setGenBtnState('prd', 'idle');
+    document.getElementById('prd-empty-tip').style.display = 'block';
     alert('生成失败：' + e.message);
   }
 }
 async function regeneratePRD() {
   document.getElementById('prd-result-box').style.display = 'none';
-  document.getElementById('prd-prompt-box').style.display = 'block';
-  const btn = document.getElementById('gen-prd-btn');
-  btn.textContent = '生成PRD文档'; btn.disabled = false;
+  document.getElementById('prd-empty-tip').style.display = 'block';
+  setGenBtnState('prd', 'idle');
 }
 async function copyPRDContent() {
   const text = document.getElementById('prd-inline-content').textContent;

@@ -133,6 +133,12 @@ class ExportRequest(BaseModel):
     mermaid: str
 
 
+class GenerateRequest(BaseModel):
+    history: List[Message]
+    requirements: List[Union[dict, str]]
+    type: str  # summary | wireframe | preview | flowchart
+
+
 # ─────────────────────────────────────────────
 # File extraction helpers
 # ─────────────────────────────────────────────
@@ -305,6 +311,77 @@ async def export_doc(req: ExportRequest):
         raise HTTPException(500, f"导出失败：{e}")
 
     return {"document": response.choices[0].message.content}
+
+
+@app.post("/api/generate")
+async def generate_section(req: GenerateRequest):
+    history_text = "\n\n".join(
+        f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
+        for m in req.history
+    )
+
+    if req.type == "flowchart":
+        prompt = f"""根据以下访谈记录，生成一份完整的 Mermaid 业务流程图。
+
+访谈记录：
+{history_text}
+
+要求：
+- 使用 graph TD 方向
+- 添加 classDef 样式（startEnd/process/decision/output/warning）
+- 中文标签，每个标签不超过12字
+- 使用 subgraph 对阶段分组
+- 只输出 Mermaid 代码，不要任何其他文字"""
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o", max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        except Exception as e:
+            raise HTTPException(500, f"生成失败：{e}")
+        raw = response.choices[0].message.content
+        cleaned = re.sub(r"```(?:mermaid)?\s*", "", raw).replace("```", "").strip()
+        return {"type": "flowchart", "mermaid": cleaned, "requirements": []}
+
+    elif req.type in ("summary", "wireframe", "preview"):
+        if req.type == "summary":
+            extra = "只需要 module/feature/description/process/inputs/outputs 字段，无需 wireframe。"
+        else:
+            extra = "必须包含 wireframe 字段，格式：顶部：...\\n中部：...\\n底部：..."
+
+        prompt = f"""根据以下访谈记录，提取并整理所有已明确的功能需求，以 JSON 数组格式输出。
+
+访谈记录：
+{history_text}
+
+要求：
+- 每个需求对象包含：module（模块名）、feature（功能名）、description（功能说明）、wireframe（界面布局，格式"顶部：...\\n中部：...\\n底部：..."）、process（操作步骤数组）、inputs（输入项数组）、outputs（输出项数组）
+- {extra}
+- 只输出 JSON 数组，不要任何其他文字
+- 确保 JSON 格式合法"""
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o", max_tokens=3000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        except Exception as e:
+            raise HTTPException(500, f"生成失败：{e}")
+        raw = response.choices[0].message.content
+        cleaned = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
+        try:
+            data = json.loads(cleaned)
+            if isinstance(data, list):
+                return {"type": req.type, "requirements": data, "mermaid": ""}
+        except Exception:
+            match = re.search(r"\[[\s\S]*\]", cleaned)
+            if match:
+                try:
+                    return {"type": req.type, "requirements": json.loads(match.group()), "mermaid": ""}
+                except Exception:
+                    pass
+        return {"type": req.type, "requirements": [], "mermaid": ""}
+
+    raise HTTPException(400, "未知生成类型")
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
