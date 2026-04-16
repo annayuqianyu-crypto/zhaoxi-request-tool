@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>需求打磨工作台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --navy: #1a365d; --navy-mid: #2a4a7f; --blue: #2b6cb0;
+      --blue-light: #ebf4ff; --gray-bg: #f7f8fa; --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--gray-bg); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+    /* ── Header ── */
+    header { background:var(--navy); color:white; padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; box-shadow:0 2px 12px rgba(0,0,0,0.25); }
+    .logo { font-size:19px; font-weight:700; letter-spacing:-.5px; }
+    .logo span { color:#90cdf4; }
+    .badge { font-size:11px; background:rgba(255,255,255,.15); padding:2px 9px; border-radius:10px; margin-left:10px; }
+    .progress-wrap { display:flex; align-items:center; gap:8px; }
+    .progress-label { font-size:12px; color:#a0aec0; }
+    .progress-bar-bg { width:110px; height:6px; background:rgba(255,255,255,.2); border-radius:3px; overflow:hidden; }
+    .progress-bar-fill { height:100%; background:#48bb78; border-radius:3px; transition:width .6s ease; width:0; }
+    .progress-pct { font-size:12px; color:#68d391; font-weight:600; min-width:32px; }
+    #export-btn { display:none; padding:7px 16px; font-size:13px; font-weight:600; background:#38a169; color:white; border:none; border-radius:6px; cursor:pointer; margin-left:12px; transition:background .2s; }
+    #export-btn:hover { background:#2f855a; }
+    #export-btn.visible { display:block; }
+
+    /* ── Main ── */
+    main { display:flex; flex:1; overflow:hidden; }
+
+    /* ── Left: Chat ── */
+    #chat-panel { width:55%; display:flex; flex-direction:column; background:white; border-right:1px solid var(--border); }
+    #chat-status { padding:10px 20px; border-bottom:1px solid var(--border); font-size:12px; color:#718096; display:flex; align-items:center; gap:6px; flex-shrink:0; }
+    .stage-dot { width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0; transition:background .3s; }
+    #messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
+    #messages::-webkit-scrollbar { width:4px; }
+    #messages::-webkit-scrollbar-thumb { background:#cbd5e0; border-radius:2px; }
+
+    .msg { display:flex; gap:10px; animation:fadeUp .25s ease; }
+    .msg.user { flex-direction:row-reverse; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+    .avatar { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; margin-top:2px; }
+    .avatar.ai { background:var(--navy); color:white; }
+    .avatar.user { background:#bee3f8; color:var(--navy); }
+    .bubble { max-width:80%; padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.65; }
+    .bubble.ai { background:#f7fafc; border:1px solid var(--border); color:#2d3748; border-top-left-radius:4px; }
+    .bubble.user { background:var(--navy); color:white; border-top-right-radius:4px; }
+
+    .typing-indicator { display:flex; gap:4px; padding:4px 0; }
+    .typing-dot { width:6px; height:6px; border-radius:50%; background:#a0aec0; animation:bounce 1.2s infinite; }
+    .typing-dot:nth-child(2){animation-delay:.2s} .typing-dot:nth-child(3){animation-delay:.4s}
+    @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+
+    /* ── Attachment chips ── */
+    #attach-chips { padding:0 20px 8px; display:flex; flex-wrap:wrap; gap:6px; min-height:0; }
+    .attach-chip { display:flex; align-items:center; gap:6px; padding:5px 10px; background:#ebf4ff; border:1px solid #bee3f8; border-radius:20px; font-size:12px; color:var(--navy); }
+    .attach-chip .chip-name { max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .chip-remove { cursor:pointer; color:#a0aec0; font-size:14px; line-height:1; padding:0 2px; }
+    .chip-remove:hover { color:#e53e3e; }
+
+    /* ── Input area ── */
+    #input-area { padding:12px 20px 16px; border-top:1px solid var(--border); display:flex; gap:8px; align-items:flex-end; flex-shrink:0; }
+    #user-input { flex:1; border:1.5px solid var(--border); border-radius:10px; padding:10px 14px; font-size:14px; resize:none; min-height:44px; max-height:130px; outline:none; font-family:inherit; line-height:1.5; transition:border-color .2s; }
+    #user-input:focus { border-color:var(--blue); }
+    .icon-btn { width:40px; height:40px; border-radius:9px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .2s; }
+    #voice-btn { background:#edf2f7; color:#4a5568; }
+    #voice-btn:hover { background:#e2e8f0; }
+    #voice-btn.recording { background:#fed7d7; color:#c53030; animation:pulse-red 1.2s infinite; }
+    @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(197,48,48,.3)}50%{box-shadow:0 0 0 6px rgba(197,48,48,0)}}
+    #attach-btn { background:#edf2f7; color:#4a5568; }
+    #attach-btn:hover { background:#e2e8f0; }
+    #send-btn { width:40px; height:40px; border-radius:9px; border:none; background:var(--navy); color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:background .2s; }
+    #send-btn:hover { background:var(--navy-mid); }
+    #send-btn:disabled { background:#a0aec0; cursor:not-allowed; }
+
+    /* ── Right panel ── */
+    #right-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--gray-bg); }
+    .tabs { display:flex; background:white; border-bottom:1px solid var(--border); flex-shrink:0; }
+    .tab-btn { padding:11px 18px; font-size:13px; font-weight:500; color:#718096; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; transition:all .2s; white-space:nowrap; }
+    .tab-btn.active { color:var(--navy); border-bottom-color:var(--navy); font-weight:600; }
+    .tab-btn:hover:not(.active) { color:#4a5568; }
+    .req-badge { display:inline-flex; align-items:center; justify-content:center; background:var(--navy); color:white; font-size:10px; font-weight:700; min-width:16px; height:16px; padding:0 4px; border-radius:8px; margin-left:5px; }
+
+    .panel-content { flex:1; overflow:auto; padding:20px; display:none; }
+    .panel-content.active { display:block; }
+    .panel-content::-webkit-scrollbar { width:4px; }
+    .panel-content::-webkit-scrollbar-thumb { background:#cbd5e0; border-radius:2px; }
+
+    /* ── Methodology tab ── */
+    .method-section-title { text-align:center; margin-bottom:20px; }
+    .method-section-title h2 { font-size:17px; font-weight:700; color:var(--navy); margin:0 0 4px; }
+    .method-section-title p { font-size:13px; color:#718096; margin:0; }
+
+    .method-cards { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:14px; }
+    .method-card { border-radius:12px; padding:18px 16px; color:white; position:relative; overflow:hidden; }
+    .method-card::before { content:''; position:absolute; top:-20px; right:-20px; width:80px; height:80px; border-radius:50%; background:rgba(255,255,255,.08); }
+    .mc-1 { background:linear-gradient(135deg,#1a365d,#2b6cb0); }
+    .mc-7 { background:linear-gradient(135deg,#234e52,#2c7a7b); }
+    .mc-11 { background:linear-gradient(135deg,#44337a,#6b46c1); }
+    .method-num { font-size:10px; font-weight:700; opacity:.7; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+    .method-icon { font-size:26px; margin-bottom:8px; }
+    .method-name { font-size:15px; font-weight:700; margin-bottom:8px; }
+    .method-desc { font-size:12px; line-height:1.6; opacity:.88; margin-bottom:10px; }
+    .method-tags { display:flex; flex-wrap:wrap; gap:4px; }
+    .method-tag { font-size:10px; background:rgba(255,255,255,.2); padding:2px 7px; border-radius:10px; }
+
+    .combine-arrow { display:flex; align-items:center; gap:8px; margin:2px 0 14px; }
+    .combine-line { flex:1; height:1px; background:linear-gradient(to right,transparent,#cbd5e0,transparent); }
+    .combine-text { font-size:12px; color:#a0aec0; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+    .combine-text::before,.combine-text::after { content:'✦'; font-size:9px; }
+
+    .synergy-box { background:white; border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:14px; }
+    .synergy-box h3 { font-size:14px; font-weight:700; color:var(--navy); margin:0 0 14px; display:flex; align-items:center; gap:6px; }
+    .synergy-box h3::before { content:''; display:inline-block; width:4px; height:16px; background:var(--navy); border-radius:2px; }
+    .synergy-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .synergy-item { display:flex; gap:10px; align-items:flex-start; padding:10px; background:#f7fafc; border-radius:8px; }
+    .synergy-emoji { font-size:20px; flex-shrink:0; }
+    .synergy-item strong { display:block; font-size:13px; color:#2d3748; margin-bottom:2px; }
+    .synergy-item p { font-size:12px; color:#718096; margin:0; line-height:1.5; }
+
+    .scenario-box { background:white; border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+    .scenario-box h4 { font-size:13px; font-weight:700; color:#4a5568; margin:0 0 10px; }
+    .scenario-tags { display:flex; flex-wrap:wrap; gap:6px; }
+    .scenario-tag { font-size:12px; background:var(--blue-light); color:var(--blue); padding:4px 10px; border-radius:12px; border:1px solid #bee3f8; }
+
+    /* ── Diagram tab ── */
+    #diagram-wrap { background:white; border:1px solid var(--border); border-radius:12px; padding:20px; min-height:220px; display:flex; align-items:center; justify-content:center; overflow:auto; }
+    #diagram-wrap svg { max-width:100%; height:auto; }
+    .diagram-placeholder { color:#a0aec0; font-size:13px; text-align:center; line-height:1.8; }
+    .diagram-toolbar { display:flex; gap:8px; margin-bottom:10px; }
+    .diagram-tool-btn { padding:4px 12px; font-size:12px; background:white; border:1px solid var(--border); border-radius:6px; cursor:pointer; color:#4a5568; transition:all .2s; }
+    .diagram-tool-btn:hover { background:var(--blue-light); border-color:var(--blue); color:var(--blue); }
+
+    /* ── Requirements tab ── */
+    .req-empty { color:#a0aec0; font-size:14px; text-align:center; padding:48px 20px; line-height:1.8; }
+    .req-card { background:white; border:1px solid var(--border); border-radius:12px; margin-bottom:14px; overflow:hidden; animation:fadeUp .3s ease; }
+    .req-card-header { display:flex; align-items:center; gap:8px; padding:12px 16px; background:linear-gradient(to right,#f7fafc,white); border-bottom:1px solid var(--border); }
+    .req-module-tag { font-size:11px; font-weight:600; background:var(--navy); color:white; padding:2px 8px; border-radius:10px; }
+    .req-feature-name { font-size:14px; font-weight:600; color:#2d3748; flex:1; }
+    .req-idx { font-size:11px; color:#a0aec0; }
+    .req-card-body { padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+    .req-desc { font-size:13px; color:#4a5568; line-height:1.6; margin:0; }
+
+    .req-section-label { font-size:11px; font-weight:600; color:#718096; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; display:flex; align-items:center; gap:4px; }
+
+    /* Wireframe */
+    .wireframe-box { background:#f8f9ff; border:1.5px dashed #b794f4; border-radius:8px; overflow:hidden; }
+    .wireframe-titlebar { background:#e9d8fd; padding:5px 10px; font-size:11px; color:#553c9a; font-weight:600; display:flex; align-items:center; gap:5px; }
+    .wireframe-titlebar::before { content:''; display:flex; gap:3px; }
+    .wireframe-dots { display:inline-flex; gap:3px; }
+    .wireframe-dot { width:7px; height:7px; border-radius:50%; }
+    .wireframe-body { padding:10px 12px; font-size:12px; color:#4a5568; font-family:monospace; white-space:pre-wrap; line-height:1.7; }
+
+    /* Process steps */
+    .process-steps { display:flex; flex-direction:column; gap:5px; }
+    .process-step { display:flex; gap:8px; align-items:flex-start; font-size:13px; color:#4a5568; }
+    .step-num { flex-shrink:0; width:20px; height:20px; border-radius:50%; background:var(--navy); color:white; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+
+    /* IO grid */
+    .req-io { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .req-io-col { background:#f7fafc; border-radius:8px; padding:10px 12px; }
+    .req-io-title { font-size:11px; font-weight:600; color:#718096; margin-bottom:6px; }
+    .req-io-item { font-size:12px; color:#4a5568; padding:3px 0; display:flex; align-items:center; gap:5px; }
+    .req-io-item::before { content:'›'; color:var(--blue); font-weight:700; }
+
+    /* ── Requirements sub-tabs ── */
+    .req-subnav { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+    .req-subbtn { padding:5px 14px; font-size:12px; font-weight:600; border:1.5px solid var(--border); border-radius:20px; background:white; color:#718096; cursor:pointer; transition:all .2s; white-space:nowrap; }
+    .req-subbtn.active { background:var(--navy); color:white; border-color:var(--navy); }
+    .req-subbtn:hover:not(.active) { border-color:var(--blue); color:var(--blue); }
+    .req-sub { display:none; }
+    .req-sub.active { display:block; }
+
+    /* Summary list */
+    .summary-item { background:white; border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; animation:fadeUp .3s ease; }
+    .summary-header { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .summary-module { font-size:11px; font-weight:600; background:var(--navy); color:white; padding:2px 8px; border-radius:10px; flex-shrink:0; }
+    .summary-feature { font-size:13px; font-weight:600; color:#2d3748; }
+    .summary-desc { font-size:13px; color:#4a5568; line-height:1.6; }
+    .summary-io { display:flex; gap:12px; margin-top:8px; flex-wrap:wrap; }
+    .summary-io-pill { font-size:11px; color:#718096; background:#f7fafc; border:1px solid var(--border); padding:2px 8px; border-radius:8px; }
+
+    /* ── Page Preview (mock browser UI) ── */
+    .page-mock-wrap { margin-bottom:16px; animation:fadeUp .3s ease; }
+    .page-mock-label { font-size:11px; font-weight:600; color:#718096; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+    .page-mock-label .pm-module { background:var(--navy); color:white; padding:1px 7px; border-radius:8px; font-size:10px; }
+    .page-mock { border:1px solid #d0d7e2; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+
+    /* browser chrome */
+    .pm-chrome { background:#e8eaed; padding:8px 12px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #cdd0d6; }
+    .pm-dots { display:flex; gap:5px; }
+    .pm-dot { width:11px; height:11px; border-radius:50%; }
+    .pm-addressbar { flex:1; background:white; border-radius:5px; padding:3px 10px; font-size:11px; color:#718096; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border:1px solid #d0d7e2; }
+
+    /* page body */
+    .pm-body { background:#f9fafb; padding:0; }
+
+    /* topbar / nav */
+    .pm-topbar { background:var(--navy); color:white; padding:8px 14px; display:flex; align-items:center; gap:10px; font-size:12px; }
+    .pm-topbar-brand { font-weight:700; font-size:13px; margin-right:8px; }
+    .pm-topbar-item { opacity:.8; font-size:11px; padding:2px 8px; border-radius:4px; }
+    .pm-topbar-item.active { background:rgba(255,255,255,.2); opacity:1; }
+    .pm-breadcrumb { background:white; padding:6px 14px; font-size:11px; color:#718096; border-bottom:1px solid var(--border); }
+
+    /* filter bar */
+    .pm-filterbar { background:white; border-bottom:1px solid var(--border); padding:8px 14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .pm-filter-field { display:flex; align-items:center; gap:4px; font-size:11px; color:#4a5568; }
+    .pm-filter-input { border:1px solid #d0d7e2; border-radius:4px; padding:3px 8px; font-size:11px; color:#a0aec0; background:white; min-width:90px; }
+    .pm-search-btn { background:var(--navy); color:white; border:none; border-radius:4px; padding:4px 12px; font-size:11px; cursor:default; }
+
+    /* content area */
+    .pm-content { padding:12px 14px; }
+
+    /* table */
+    .pm-table { width:100%; border-collapse:collapse; font-size:11px; background:white; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+    .pm-table th { background:#f7fafc; padding:7px 10px; text-align:left; font-weight:600; color:#4a5568; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .pm-table td { padding:6px 10px; color:#a0aec0; border-bottom:1px solid #f0f4f8; white-space:nowrap; }
+    .pm-table tr:last-child td { border-bottom:none; }
+    .pm-status-tag { display:inline-block; padding:1px 7px; border-radius:8px; font-size:10px; font-weight:600; }
+    .pm-status-done { background:#c6f6d5; color:#276749; }
+    .pm-status-pending { background:#fef3c7; color:#92400e; }
+    .pm-status-progress { background:#bee3f8; color:#2c5282; }
+
+    /* form */
+    .pm-form { background:white; border:1px solid var(--border); border-radius:6px; padding:12px; margin-bottom:10px; }
+    .pm-form-title { font-size:12px; font-weight:600; color:#2d3748; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+    .pm-form-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+    .pm-form-field { display:flex; flex-direction:column; gap:3px; }
+    .pm-form-label { font-size:10px; color:#718096; font-weight:500; }
+    .pm-form-input { border:1px solid #d0d7e2; border-radius:4px; padding:5px 8px; font-size:11px; color:#a0aec0; background:white; }
+    .pm-form-input.required { border-color:#feb2b2; }
+
+    /* action bar */
+    .pm-actionbar { background:white; border-top:1px solid var(--border); padding:10px 14px; display:flex; gap:8px; justify-content:flex-end; }
+    .pm-btn { padding:5px 14px; border-radius:5px; font-size:11px; font-weight:600; border:none; cursor:default; }
+    .pm-btn-primary { background:var(--navy); color:white; }
+    .pm-btn-secondary { background:#edf2f7; color:#4a5568; }
+    .pm-btn-danger { background:#fff5f5; color:#c53030; border:1px solid #feb2b2; }
+
+    /* stat cards */
+    .pm-stat-row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px; }
+    .pm-stat-card { background:white; border:1px solid var(--border); border-radius:6px; padding:10px 12px; }
+    .pm-stat-num { font-size:20px; font-weight:700; color:var(--navy); }
+    .pm-stat-label { font-size:10px; color:#718096; margin-top:2px; }
+
+    /* ── Export Modal ── */
+    #modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:center; justify-content:center; }
+    #modal-overlay.open { display:flex; }
+    #modal-box { background:white; border-radius:14px; width:780px; max-width:92vw; max-height:86vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.25); }
+    #modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    #modal-header h2 { margin:0; font-size:16px; font-weight:700; color:var(--navy); }
+    #modal-body { flex:1; overflow-y:auto; padding:20px 24px; }
+    #doc-content { font-size:13px; line-height:1.75; color:#2d3748; white-space:pre-wrap; margin:0; font-family:inherit; }
+    #modal-footer { padding:14px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; }
+    .btn { padding:8px 18px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all .2s; }
+    .btn-secondary { background:#edf2f7; color:#4a5568; }
+    .btn-secondary:hover { background:#e2e8f0; }
+    .btn-success { background:#38a169; color:white; }
+    .btn-success:hover { background:#2f855a; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div style="display:flex;align-items:center">
+    <div class="logo">需求<span>打磨</span>工作台</div>
+    <div class="badge">家族财富 · 全球税务 · 资本市场 · 法律咨询 · 企业治理</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="progress-wrap">
+      <span class="progress-label">需求完整度</span>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
+      <span class="progress-pct" id="progress-pct">0%</span>
+    </div>
+    <button id="export-btn" onclick="startExport()">⬇ 导出需求文档</button>
+  </div>
+</header>
+
+<!-- ── Main ── -->
+<main>
+  <!-- Left: Chat panel -->
+  <div id="chat-panel">
+    <div id="chat-status">
+      <div class="stage-dot" id="stage-dot"></div>
+      <span id="stage-label">准备开始</span>
+    </div>
+    <div id="messages"></div>
+    <div id="attach-chips"></div>
+    <div id="input-area">
+      <textarea id="user-input" placeholder="描述您的业务场景，或回答分析师的问题…" rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <!-- Voice button -->
+      <button class="icon-btn" id="voice-btn" onclick="toggleVoice()" title="语音输入">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <!-- Attach button -->
+      <button class="icon-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="上传附件">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+        </svg>
+      </button>
+      <input id="file-input" type="file" accept=".docx,.xlsx,.pptx,.ppt" hidden onchange="handleFileSelect(event)">
+      <!-- Send button -->
+      <button id="send-btn" onclick="sendMessage()" title="发送 (Enter)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div id="right-panel">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('methodology',this)">工具方法论</button>
+      <button class="tab-btn" onclick="switchTab('diagram',this)" id="tab-diagram-btn">业务流程图</button>
+      <button class="tab-btn" onclick="switchTab('requirements',this)" id="tab-req-btn">
+        需求清单<span class="req-badge" id="req-count">0</span>
+      </button>
+    </div>
+
+    <!-- Tab 1: Methodology -->
+    <div class="panel-content active" id="tab-methodology">
+      <div class="method-section-title">
+        <h2>需求打磨方法论</h2>
+        <p>将模糊的业务想法转化为精准可落地的IT需求规格</p>
+      </div>
+
+      <div class="method-cards">
+        <!-- 需求锚定 -->
+        <div class="method-card mc-7">
+          <div class="method-num">STEP 01</div>
+          <div class="method-icon">⚓</div>
+          <div class="method-name">需求锚定</div>
+          <div class="method-desc">以真实业务场景为锚点，请业务方描述一个具体工作故事，AI从叙述中提炼功能要求，避免业务方面对"你要什么功能"无从回答</div>
+          <div class="method-tags">
+            <span class="method-tag">真实场景</span>
+            <span class="method-tag">故事驱动</span>
+            <span class="method-tag">降低门槛</span>
+            <span class="method-tag">锚定起点</span>
+          </div>
+        </div>
+        <!-- 功能确认 -->
+        <div class="method-card mc-1">
+          <div class="method-num">STEP 02</div>
+          <div class="method-icon">✅</div>
+          <div class="method-name">功能确认</div>
+          <div class="method-desc">AI根据业务描述动态生成追问，逐一确认功能边界，自动适配税务规划、资本市场、法律咨询、企业治理等专业场景，覆盖八大维度</div>
+          <div class="method-tags">
+            <span class="method-tag">角色权限</span>
+            <span class="method-tag">审批链路</span>
+            <span class="method-tag">合规要求</span>
+            <span class="method-tag">异常处理</span>
+          </div>
+        </div>
+        <!-- 呈现形式 -->
+        <div class="method-card mc-11">
+          <div class="method-num">STEP 03</div>
+          <div class="method-icon">🖼️</div>
+          <div class="method-name">呈现形式</div>
+          <div class="method-desc">对话与流程图同步推进，业务方通过"看着图纠错"确认理解，最终输出需求梳理、线框图、流程图、PRD文档四类交付物</div>
+          <div class="method-tags">
+            <span class="method-tag">实时流程图</span>
+            <span class="method-tag">界面线框</span>
+            <span class="method-tag">PRD文档</span>
+            <span class="method-tag">即时纠偏</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="combine-arrow">
+        <div class="combine-line"></div>
+        <div class="combine-text">三步递进，环环相扣</div>
+        <div class="combine-line"></div>
+      </div>
+
+      <div class="synergy-box">
+        <h3>协同效果</h3>
+        <div class="synergy-grid">
+          <div class="synergy-item">
+            <div class="synergy-emoji">👔</div>
+            <div>
+              <strong>朝曦业务团队</strong>
+              <p>架构师、税务师、律师等专业人员无需懂IT，通过讲业务故事即可清晰表达需求，全程可复查</p>
+            </div>
+          </div>
+          <div class="synergy-item">
+            <div class="synergy-emoji">🤖</div>
+            <div>
+              <strong>AI需求分析师</strong>
+              <p>深度理解家族财富、全球税务、资本市场、法律合规等专业场景，动态生成精准追问</p>
+            </div>
+          </div>
+          <div class="synergy-item">
+            <div class="synergy-emoji">💻</div>
+            <div>
+              <strong>IT开发团队</strong>
+              <p>收到含流程图、界面线框、功能清单、PRD文档的完整规格包，大幅减少返工和二次确认</p>
+            </div>
+          </div>
+          <div class="synergy-item">
+            <div class="synergy-emoji">📊</div>
+            <div>
+              <strong>管理决策层</strong>
+              <p>每个需求点均有访谈记录支撑，需求来源可追溯，优先级讨论有据可依</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scenario-box">
+        <h4>朝曦典型适用场景</h4>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">家族财富架构</div>
+            <div class="scenario-tags">
+              <span class="scenario-tag">境内家族股权信托台账</span>
+              <span class="scenario-tag">境外信托架构管理</span>
+              <span class="scenario-tag">全球资产配置追踪</span>
+              <span class="scenario-tag">财富传承方案管理</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">全球税务规划</div>
+            <div class="scenario-tags">
+              <span class="scenario-tag">上市公司股东减持税务</span>
+              <span class="scenario-tag">美/加税务合规申报</span>
+              <span class="scenario-tag">CRS/FATCA风险识别</span>
+              <span class="scenario-tag">跨境架构涉税管理</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">资本市场服务</div>
+            <div class="scenario-tags">
+              <span class="scenario-tag">股东减持规划系统</span>
+              <span class="scenario-tag">拟上市架构设计台账</span>
+              <span class="scenario-tag">股权激励方案管理</span>
+              <span class="scenario-tag">私募基金架构追踪</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">法律与企业治理</div>
+            <div class="scenario-tags">
+              <span class="scenario-tag">婚姻家事资产架构</span>
+              <span class="scenario-tag">合同生命周期管理</span>
+              <span class="scenario-tag">ESG合规报告平台</span>
+              <span class="scenario-tag">客户档案与服务台账</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Flowchart -->
+    <div class="panel-content" id="tab-diagram">
+      <div class="diagram-toolbar">
+        <button class="diagram-tool-btn" onclick="zoomDiagram(0.2)">放大 +</button>
+        <button class="diagram-tool-btn" onclick="zoomDiagram(-0.2)">缩小 −</button>
+        <button class="diagram-tool-btn" onclick="resetZoom()">适应屏幕</button>
+      </div>
+      <div id="diagram-wrap">
+        <div class="diagram-placeholder">
+          开始对话后，业务流程图将在此实时生成<br>
+          <span style="font-size:12px;color:#cbd5e0">每次回复均自动更新</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Requirements (4 sub-sections) -->
+    <div class="panel-content" id="tab-requirements">
+      <!-- Sub-tab navigation -->
+      <div class="req-subnav">
+        <button class="req-subbtn active" onclick="switchReqSub('summary',this)">📝 需求梳理</button>
+        <button class="req-subbtn" onclick="switchReqSub('wireframe',this)">📐 线框图</button>
+        <button class="req-subbtn" onclick="switchReqSub('preview',this)">🖥️ 页面展示</button>
+        <button class="req-subbtn" onclick="switchReqSub('flowchart',this)">🔄 流程图</button>
+        <button class="req-subbtn" onclick="switchReqSub('prd',this)">📄 PRD文档</button>
+      </div>
+
+      <!-- 需求梳理 -->
+      <div id="req-sub-summary" class="req-sub active">
+        <div id="summary-list">
+          <div class="req-empty">需求梳理内容将随访谈进度在此积累<br><span style="font-size:12px;color:#cbd5e0">便于业务团队逐条复查确认</span></div>
+        </div>
+      </div>
+
+      <!-- 线框图 -->
+      <div id="req-sub-wireframe" class="req-sub">
+        <div id="wireframe-list">
+          <div class="req-empty">界面线框图将在访谈过程中逐步生成<br><span style="font-size:12px;color:#cbd5e0">每个功能点对应一张页面草图</span></div>
+        </div>
+      </div>
+
+      <!-- 页面展示 -->
+      <div id="req-sub-preview" class="req-sub">
+        <div id="preview-list">
+          <div class="req-empty">页面模拟图将随需求积累自动生成<br><span style="font-size:12px;color:#cbd5e0">每个功能页面以仿真界面形式呈现</span></div>
+        </div>
+      </div>
+
+      <!-- 流程图 -->
+      <div id="req-sub-flowchart" class="req-sub">
+        <div class="diagram-toolbar">
+          <button class="diagram-tool-btn" onclick="zoomReqDiagram(0.2)">放大 +</button>
+          <button class="diagram-tool-btn" onclick="zoomReqDiagram(-0.2)">缩小 −</button>
+          <button class="diagram-tool-btn" onclick="resetReqZoom()">适应屏幕</button>
+        </div>
+        <div id="req-flow-wrap" style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;min-height:200px;display:flex;align-items:center;justify-content:center;overflow:auto;">
+          <div class="diagram-placeholder">开始对话后，流程图将在此同步显示</div>
+        </div>
+      </div>
+
+      <!-- PRD文档 -->
+      <div id="req-sub-prd" class="req-sub">
+        <div id="prd-prompt-box" style="text-align:center;padding:32px 20px;">
+          <div style="font-size:40px;margin-bottom:12px;">📄</div>
+          <p style="font-size:14px;color:#4a5568;margin:0 0 8px;font-weight:600;">PRD需求规格说明书</p>
+          <p style="font-size:13px;color:#718096;margin:0 0 20px;line-height:1.7;">访谈完成后，点击生成完整PRD文档<br>包含背景、角色、流程、功能清单、验收标准等9个章节<br>可直接交付IT开发团队进行工作量评估</p>
+          <button id="gen-prd-btn" onclick="generatePRDInline()" style="padding:10px 28px;background:var(--navy);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;" onmouseover="this.style.background='#2a4a7f'" onmouseout="this.style.background='var(--navy)'">生成PRD文档</button>
+        </div>
+        <div id="prd-result-box" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:13px;font-weight:600;color:var(--navy);">📄 已生成需求规格说明书</span>
+            <div style="display:flex;gap:8px;">
+              <button onclick="regeneratePRD()" style="padding:5px 12px;font-size:12px;background:#edf2f7;border:none;border-radius:6px;cursor:pointer;color:#4a5568;">重新生成</button>
+              <button onclick="copyPRDContent()" style="padding:5px 12px;font-size:12px;background:var(--navy);color:white;border:none;border-radius:6px;cursor:pointer;">复制全文</button>
+            </div>
+          </div>
+          <div style="background:white;border:1px solid var(--border);border-radius:10px;padding:20px;max-height:520px;overflow-y:auto;">
+            <pre id="prd-inline-content" style="font-size:13px;line-height:1.75;color:#2d3748;white-space:pre-wrap;margin:0;font-family:inherit;"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ── Export Modal ── -->
+<div id="modal-overlay" onclick="closeModalOnOverlay(event)">
+  <div id="modal-box">
+    <div id="modal-header">
+      <h2>📄 需求规格说明书</h2>
+      <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#718096;font-size:20px;line-height:1">✕</button>
+    </div>
+    <div id="modal-body"><pre id="doc-content">正在生成需求文档，请稍候…</pre></div>
+    <div id="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">关闭</button>
+      <button class="btn btn-success" onclick="copyDoc()">复制全文</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── App State ──
+let history = [];
+let currentMermaid = '';
+let currentRequirements = [];
+let completeness = 0;
+let isLoading = false;
+let diagramScale = 1;
+let attachedFile = null;  // { filename, extracted_text }
+
+// Voice
+let recognition = null;
+let isRecording = false;
+let speechBaseText = '';
+let speechBuffer = '';
+
+// ── Init ──
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  themeVariables: {
+    primaryColor: '#1a365d',
+    primaryTextColor: '#ffffff',
+    primaryBorderColor: '#2b6cb0',
+    lineColor: '#4a90d9',
+    secondaryColor: '#ebf4ff',
+    secondaryTextColor: '#2d3748',
+    tertiaryColor: '#f7fafc',
+    clusterBkg: '#f0f7ff',
+    clusterBorder: '#bee3f8',
+    titleColor: '#1a365d',
+    edgeLabelBackground: '#f7fafc',
+    fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+    fontSize: '14px'
+  },
+  flowchart: { curve: 'basis', padding: 20, useMaxWidth: true }
+});
+
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const data = await fetch('/api/init').then(r => r.json());
+    applyAIResponse(data, false);
+  } catch(e) {
+    addMessage('ai', '⚠️ 服务连接失败，请检查后端是否启动。\n' + e.message);
+  }
+});
+
+// ── Send message ──
+async function sendMessage() {
+  const ta = document.getElementById('user-input');
+  const text = ta.value.trim();
+  if (!text || isLoading) return;
+
+  // Build message content (include attached file if any)
+  let fullContent = text;
+  if (attachedFile) {
+    fullContent = `[📎 附件：${attachedFile.filename}，共${attachedFile.char_count}字]\n\n${attachedFile.extracted_text}\n\n---\n[用户说明]\n${text}`;
+    clearAttachment();
+  }
+
+  ta.value = '';
+  autoResize(ta);
+
+  addMessage('user', text); // Show original text in UI
+  setLoading(true);
+  history.push({ role: 'user', content: fullContent });
+
+  // Auto-switch to diagram tab on first user message
+  if (history.filter(h => h.role === 'user').length === 1) {
+    switchTabById('diagram');
+  }
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history: history.slice(0, -1), message: fullContent })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    applyAIResponse(data, true);
+  } catch(e) {
+    removeTyping();
+    addMessage('ai', '⚠️ 请求失败：' + e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function applyAIResponse(data, addToHistory) {
+  removeTyping();
+  const msg = data.message || '';
+  addMessage('ai', msg);
+  if (addToHistory) history.push({ role: 'assistant', content: msg });
+
+  if (data.mermaid) {
+    currentMermaid = data.mermaid;
+    renderDiagram(data.mermaid);
+  }
+  if (Array.isArray(data.requirements) && data.requirements.length > 0) {
+    currentRequirements = data.requirements;
+    renderRequirements(data.requirements);
+  }
+  if (typeof data.completeness === 'number') setCompleteness(data.completeness);
+  if (data.stage) updateStage(data.stage);
+}
+
+// ── UI Helpers ──
+function addMessage(role, text) {
+  const c = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `
+    <div class="avatar ${role}">${role === 'ai' ? 'AI' : '我'}</div>
+    <div class="bubble ${role}">${fmt(text)}</div>`;
+  c.appendChild(div);
+  scrollBottom();
+  if (role === 'user') addTyping();
+}
+
+function fmt(text) {
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br>');
+}
+
+function addTyping() {
+  removeTyping();
+  const c = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg ai'; div.id = 'typing';
+  div.innerHTML = `<div class="avatar ai">AI</div><div class="bubble ai" style="padding:14px 16px"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+  c.appendChild(div);
+  scrollBottom();
+}
+function removeTyping() { const el=document.getElementById('typing'); if(el) el.remove(); }
+function scrollBottom() { const el=document.getElementById('messages'); el.scrollTop=el.scrollHeight; }
+function setLoading(v) { isLoading=v; document.getElementById('send-btn').disabled=v; }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,130)+'px'; }
+function handleKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Tab switching ──
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.panel-content').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+function switchTabById(name) {
+  const btn = name === 'diagram' ? document.getElementById('tab-diagram-btn') : document.getElementById('tab-req-btn');
+  if(btn) switchTab(name, btn);
+}
+
+// ── Requirements sub-tab switching ──
+function switchReqSub(name, btn) {
+  document.querySelectorAll('.req-subbtn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.req-sub').forEach(s=>s.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('req-sub-'+name).classList.add('active');
+}
+
+// ── Stage ──
+const STAGE_MAP = { opening:'准备开始', exploring:'场景探索中', drilling:'深度追问中', summarizing:'整理总结中' };
+const STAGE_CLR = { opening:'#a0aec0', exploring:'#4299e1', drilling:'#ed8936', summarizing:'#48bb78' };
+function updateStage(s) {
+  document.getElementById('stage-label').textContent = STAGE_MAP[s]||s;
+  document.getElementById('stage-dot').style.background = STAGE_CLR[s]||'#68d391';
+}
+
+// ── Progress ──
+function setCompleteness(pct) {
+  completeness = pct;
+  document.getElementById('progress-fill').style.width = pct+'%';
+  document.getElementById('progress-pct').textContent = pct+'%';
+  if (pct >= 70) document.getElementById('export-btn').classList.add('visible');
+}
+
+// ── Diagram ──
+let diagCounter = 0;
+let reqDiagramScale = 1;
+
+async function renderDiagram(code) {
+  diagCounter++;
+  await renderMermaidInto('diagram-wrap', 'mmd-main-'+diagCounter, code, diagramScale);
+  await renderMermaidInto('req-flow-wrap', 'mmd-req-'+diagCounter, code, reqDiagramScale);
+}
+
+async function renderMermaidInto(wrapId, id, code, scale) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  try {
+    const { svg } = await mermaid.render(id, code);
+    wrap.innerHTML = svg;
+    const s = wrap.querySelector('svg');
+    if (s) { s.style.transform = `scale(${scale})`; s.style.transformOrigin = 'top center'; }
+  } catch(e) {
+    wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图语法有误，继续对话后将自动修正</div>';
+  }
+}
+
+function zoomDiagram(delta) {
+  diagramScale = Math.max(0.4, Math.min(2.5, diagramScale+delta));
+  const s = document.querySelector('#diagram-wrap svg');
+  if(s) { s.style.transform=`scale(${diagramScale})`; s.style.transformOrigin='top center'; }
+}
+function resetZoom() {
+  diagramScale = 1;
+  const s = document.querySelector('#diagram-wrap svg');
+  if(s) s.style.transform = 'scale(1)';
+}
+function zoomReqDiagram(delta) {
+  reqDiagramScale = Math.max(0.4, Math.min(2.5, reqDiagramScale+delta));
+  const s = document.querySelector('#req-flow-wrap svg');
+  if(s) { s.style.transform=`scale(${reqDiagramScale})`; s.style.transformOrigin='top center'; }
+}
+function resetReqZoom() {
+  reqDiagramScale = 1;
+  const s = document.querySelector('#req-flow-wrap svg');
+  if(s) s.style.transform = 'scale(1)';
+}
+
+// ── Requirements Rendering (4 sections) ──
+function renderRequirements(list) {
+  document.getElementById('req-count').textContent = list.length;
+  if (!list.length) return;
+
+  // Flash badge on requirements tab
+  const btn = document.getElementById('tab-req-btn');
+  btn.style.color = '#48bb78';
+  setTimeout(() => btn.style.color = '', 1500);
+
+  const summaryEl = document.getElementById('summary-list');
+  const wireframeEl = document.getElementById('wireframe-list');
+  summaryEl.innerHTML = '';
+  wireframeEl.innerHTML = '';
+
+  let hasWireframe = false;
+
+  list.forEach((req, i) => {
+    if (typeof req === 'string') {
+      const d = document.createElement('div');
+      d.className = 'summary-item';
+      d.innerHTML = `<div class="summary-header"><span class="summary-module">需求</span><span class="summary-feature">${esc(req)}</span></div>`;
+      summaryEl.appendChild(d);
+    } else {
+      renderSummaryItem(summaryEl, req, i);
+      if (req.wireframe) { renderWireframeItem(wireframeEl, req, i); hasWireframe = true; }
+    }
+  });
+
+  // 页面展示
+  renderRequirementsPreview(list);
+
+  if (!hasWireframe) {
+    wireframeEl.innerHTML = '<div class="req-empty">当前已确认需求暂无界面草图<br><span style="font-size:12px;color:#cbd5e0">继续访谈后将逐步生成</span></div>';
+  }
+}
+
+function renderSummaryItem(container, req, i) {
+  const ioPills = [
+    ...(req.inputs||[]).map(x=>`<span class="summary-io-pill">📥 ${esc(x)}</span>`),
+    ...(req.outputs||[]).map(x=>`<span class="summary-io-pill">📤 ${esc(x)}</span>`)
+  ].join('');
+
+  const processHtml = (req.process&&req.process.length) ? `
+    <div style="margin-top:8px;">
+      <div style="font-size:11px;color:#a0aec0;margin-bottom:4px;">流程</div>
+      <div style="font-size:12px;color:#4a5568;">${req.process.map((s,j)=>`<span style="margin-right:6px;"><span style="color:var(--blue);font-weight:700">${j+1}.</span> ${esc(s)}</span>`).join(' → ')}</div>
+    </div>` : '';
+
+  const d = document.createElement('div');
+  d.className = 'summary-item';
+  d.innerHTML = `
+    <div class="summary-header">
+      <span class="summary-module">${esc(req.module||'功能')}</span>
+      <span class="summary-feature">${esc(req.feature||'')}</span>
+      <span style="margin-left:auto;font-size:11px;color:#a0aec0">#${i+1}</span>
+    </div>
+    <div class="summary-desc">${esc(req.description||'')}</div>
+    ${processHtml}
+    ${ioPills ? `<div class="summary-io" style="margin-top:8px;">${ioPills}</div>` : ''}`;
+  container.appendChild(d);
+}
+
+function renderWireframeItem(container, req, i) {
+  const processHtml = (req.process&&req.process.length) ? `
+    <div style="margin-top:12px;">
+      <div class="req-section-label">🔄 处理流程</div>
+      <div class="process-steps">
+        ${req.process.map((s,j)=>`<div class="process-step"><div class="step-num">${j+1}</div><span>${esc(s)}</span></div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const ioHtml = ((req.inputs&&req.inputs.length)||(req.outputs&&req.outputs.length)) ? `
+    <div class="req-io" style="margin-top:12px;">
+      ${req.inputs&&req.inputs.length?`<div class="req-io-col"><div class="req-io-title">📥 输入数据</div>${req.inputs.map(x=>`<div class="req-io-item">${esc(x)}</div>`).join('')}</div>`:''}
+      ${req.outputs&&req.outputs.length?`<div class="req-io-col"><div class="req-io-title">📤 输出结果</div>${req.outputs.map(x=>`<div class="req-io-item">${esc(x)}</div>`).join('')}</div>`:''}
+    </div>` : '';
+
+  const d = document.createElement('div');
+  d.className = 'req-card';
+  d.innerHTML = `
+    <div class="req-card-header">
+      <span class="req-module-tag">${esc(req.module||'功能')}</span>
+      <span class="req-feature-name">${esc(req.feature||'')}</span>
+      <span class="req-idx">#${i+1}</span>
+    </div>
+    <div class="req-card-body">
+      <p class="req-desc">${esc(req.description||'')}</p>
+      <div style="margin-top:10px;">
+        <div class="req-section-label">📐 界面草图</div>
+        <div class="wireframe-box">
+          <div class="wireframe-titlebar">
+            <div class="wireframe-dots">
+              <div class="wireframe-dot" style="background:#fc8181"></div>
+              <div class="wireframe-dot" style="background:#f6e05e"></div>
+              <div class="wireframe-dot" style="background:#68d391"></div>
+            </div>
+            &nbsp;${esc(req.feature||'页面草图')}
+          </div>
+          <div class="wireframe-body">${esc(req.wireframe)}</div>
+        </div>
+      </div>
+      ${processHtml}
+      ${ioHtml}
+    </div>`;
+  container.appendChild(d);
+}
+
+// ── Page Preview Rendering ──
+function renderRequirementsPreview(list) {
+  const el = document.getElementById('preview-list');
+  el.innerHTML = '';
+  const withWireframe = list.filter(r => typeof r === 'object' && r.wireframe);
+  if (!withWireframe.length) {
+    el.innerHTML = '<div class="req-empty">页面模拟图将在需求确认后自动生成<br><span style="font-size:12px;color:#cbd5e0">继续访谈补充界面描述后即可呈现</span></div>';
+    return;
+  }
+  withWireframe.forEach((req, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'page-mock-wrap';
+    wrap.innerHTML = `
+      <div class="page-mock-label">
+        <span class="pm-module">${esc(req.module||'功能')}</span>
+        ${esc(req.feature||'')}
+      </div>
+      <div class="page-mock">
+        ${buildBrowserChrome(req)}
+        <div class="pm-body">${buildPageBody(req)}</div>
+      </div>`;
+    el.appendChild(wrap);
+  });
+}
+
+function buildBrowserChrome(req) {
+  return `
+    <div class="pm-chrome">
+      <div class="pm-dots">
+        <div class="pm-dot" style="background:#fc8181"></div>
+        <div class="pm-dot" style="background:#f6e05e"></div>
+        <div class="pm-dot" style="background:#68d391"></div>
+      </div>
+      <div class="pm-addressbar">🔒 zhaorui.internal / ${esc((req.module||'').toLowerCase().replace(/\s+/g,'-'))} / ${esc((req.feature||'').toLowerCase().replace(/\s+/g,'-'))}</div>
+    </div>`;
+}
+
+function buildPageBody(req) {
+  const wf = req.wireframe || '';
+  const lines = wf.split('\n').map(l => l.trim()).filter(Boolean);
+  const featureName = req.feature || '功能页面';
+  const moduleName = req.module || '系统';
+  const inputs = req.inputs || [];
+  const outputs = req.outputs || [];
+
+  // Classify each wireframe line
+  const parts = lines.map(classifyLine);
+
+  let html = '';
+
+  // Top nav bar
+  html += `<div class="pm-topbar">
+    <span class="pm-topbar-brand">朝曦管理系统</span>
+    <span class="pm-topbar-item active">${esc(moduleName)}</span>
+    <span class="pm-topbar-item">工作台</span>
+    <span class="pm-topbar-item">设置</span>
+    <span style="margin-left:auto;font-size:11px;opacity:.7">👤 当前用户</span>
+  </div>`;
+
+  // Breadcrumb
+  html += `<div class="pm-breadcrumb">首页 › ${esc(moduleName)} › ${esc(featureName)}</div>`;
+
+  // Build content based on wireframe classification
+  const hasFilter = parts.some(p => p.type === 'filter');
+  const hasTable  = parts.some(p => p.type === 'table');
+  const hasForm   = parts.some(p => p.type === 'form');
+  const hasStat   = parts.some(p => p.type === 'stat');
+
+  html += '<div class="pm-content">';
+
+  // Stat cards (dashboard style)
+  if (hasStat) {
+    const labels = outputs.length ? outputs.slice(0,3) : ['处理总量','待审批','已完成'];
+    html += `<div class="pm-stat-row">
+      ${labels.map((l,i) => `<div class="pm-stat-card"><div class="pm-stat-num">${[24,7,17][i]}</div><div class="pm-stat-label">${esc(l)}</div></div>`).join('')}
+    </div>`;
+  }
+
+  // Filter bar (for list pages)
+  if (hasFilter || hasTable) {
+    const filterFields = inputs.slice(0, 3);
+    html += `<div class="pm-filterbar" style="border-radius:6px;border:1px solid var(--border);margin-bottom:10px;">
+      ${filterFields.map(f => `<div class="pm-filter-field"><span>${esc(f)}</span><div class="pm-filter-input">${placeholderFor(f)}</div></div>`).join('')}
+      ${filterFields.length ? '<button class="pm-search-btn">查询</button>' : ''}
+      <button style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11px;color:#718096;cursor:default;margin-left:auto;">+ 新建</button>
+    </div>`;
+  }
+
+  // Form (for entry pages)
+  if (hasForm && !hasTable) {
+    const formFields = inputs.length ? inputs : ['申请人','申请日期','所属部门','备注'];
+    html += `<div class="pm-form">
+      <div class="pm-form-title">${esc(featureName)}</div>
+      <div class="pm-form-grid">
+        ${formFields.map((f,i) => `
+          <div class="pm-form-field">
+            <div class="pm-form-label">${esc(f)} ${i<2?'<span style="color:#fc8181">*</span>':''}</div>
+            <div class="pm-form-input ${i<2?'required':''}">${placeholderFor(f)}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Table (for list pages)
+  if (hasTable) {
+    const cols = deriveTableCols(lines, inputs);
+    html += `<div class="pm-table" style="width:100%">
+      <table class="pm-table">
+        <thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}<th>操作</th></tr></thead>
+        <tbody>
+          ${[1,2,3].map(r => `<tr>
+            ${cols.map((c,ci) => `<td>${ci===cols.length-2
+              ? `<span class="pm-status-tag ${['pm-status-done','pm-status-pending','pm-status-progress'][r-1]}">${['已完成','待审批','处理中'][r-1]}</span>`
+              : mockCellValue(c, r)}</td>`).join('')}
+            <td><span style="color:var(--blue);font-size:11px;cursor:default;margin-right:6px;">查看</span><span style="color:#718096;font-size:11px;cursor:default;">编辑</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  html += '</div>'; // pm-content
+
+  // Action bar
+  const process = req.process || [];
+  const hasSubmit = process.some(p => /提交|审批|保存|发送/.test(p)) || wf.includes('提交') || wf.includes('按钮');
+  if (hasForm || hasSubmit) {
+    html += `<div class="pm-actionbar">
+      <button class="pm-btn pm-btn-secondary">取消</button>
+      <button class="pm-btn pm-btn-secondary">保存草稿</button>
+      <button class="pm-btn pm-btn-primary">提交</button>
+    </div>`;
+  }
+
+  return html;
+}
+
+// Classify a wireframe line into a UI type
+function classifyLine(line) {
+  const l = line.toLowerCase();
+  if (/统计|总量|数量|概览|dashboard|汇总/.test(l)) return { type:'stat', text:line };
+  if (/筛选|查询|搜索|过滤|filter/.test(l)) return { type:'filter', text:line };
+  if (/表格|列表|清单|table|list|序号/.test(l) || (line.includes('|') && line.split('|').length > 2)) return { type:'table', text:line };
+  if (/表单|填写|录入|form|输入|编辑|新建/.test(l)) return { type:'form', text:line };
+  if (/按钮|提交|保存|确认|button/.test(l)) return { type:'action', text:line };
+  return { type:'content', text:line };
+}
+
+// Derive table columns from wireframe lines and inputs
+function deriveTableCols(lines, inputs) {
+  // Try to find a pipe-separated column line
+  const colLine = lines.find(l => l.includes('|') && l.split('|').length > 2);
+  if (colLine) {
+    return colLine.split('|').map(c => c.trim().replace(/[【】\[\]]/g,'')).filter(Boolean).slice(0,6);
+  }
+  // Fallback: derive from inputs
+  const base = inputs.slice(0,4);
+  if (!base.length) return ['编号','名称','日期','金额','状态'];
+  return ['序号', ...base.slice(0,3), '状态'];
+}
+
+function placeholderFor(field) {
+  if (/日期|时间/.test(field)) return '2025-01-01';
+  if (/金额|费用|价格/.test(field)) return '¥ ___';
+  if (/部门|团队/.test(field)) return '请选择 ▾';
+  if (/人|姓名|联系/.test(field)) return '请输入';
+  return '请输入';
+}
+
+function mockCellValue(col, row) {
+  if (/日期|时间/.test(col)) return `2025-0${row}-1${row}`;
+  if (/金额|费用/.test(col)) return `¥${[12,38,56][row-1]},000`;
+  if (/编号|序号/.test(col)) return `202500${row}`;
+  if (/人|申请人/.test(col)) return ['张三','李四','王五'][row-1];
+  return `—`;
+}
+
+// ── PRD inline generation ──
+async function generatePRDInline() {
+  const btn = document.getElementById('gen-prd-btn');
+  btn.textContent = '生成中…'; btn.disabled = true;
+  try {
+    const resp = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    document.getElementById('prd-inline-content').textContent = data.document || '';
+    document.getElementById('prd-prompt-box').style.display = 'none';
+    document.getElementById('prd-result-box').style.display = 'block';
+  } catch(e) {
+    btn.textContent = '生成PRD文档'; btn.disabled = false;
+    alert('生成失败：' + e.message);
+  }
+}
+async function regeneratePRD() {
+  document.getElementById('prd-result-box').style.display = 'none';
+  document.getElementById('prd-prompt-box').style.display = 'block';
+  const btn = document.getElementById('gen-prd-btn');
+  btn.textContent = '生成PRD文档'; btn.disabled = false;
+}
+async function copyPRDContent() {
+  const text = document.getElementById('prd-inline-content').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✓ 已复制';
+    setTimeout(() => btn.textContent = orig, 2000);
+  } catch { alert('请手动复制'); }
+}
+
+// ── File Upload ──
+async function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('file-input').value = ''; // Reset input
+
+  // Show loading chip
+  showAttachChip(file.name, null, true);
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/api/upload', { method: 'POST', body: fd });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Upload failed');
+    }
+    const data = await resp.json();
+    attachedFile = data;
+    showAttachChip(data.filename, data.char_count, false);
+  } catch(e) {
+    clearAttachment();
+    alert('文件解析失败：' + e.message);
+  }
+}
+
+function showAttachChip(name, charCount, loading) {
+  clearAttachChip();
+  const c = document.getElementById('attach-chips');
+  const chip = document.createElement('div');
+  chip.className = 'attach-chip';
+  chip.id = 'current-chip';
+  chip.innerHTML = loading
+    ? `<span>⏳</span><span class="chip-name">${esc(name)}</span><span style="color:#a0aec0;font-size:11px">解析中…</span>`
+    : `<span>📎</span><span class="chip-name">${esc(name)}</span><span style="color:#718096;font-size:11px">${charCount}字</span><span class="chip-remove" onclick="clearAttachment()">✕</span>`;
+  c.appendChild(chip);
+}
+
+function clearAttachChip() { const el=document.getElementById('current-chip'); if(el) el.remove(); }
+function clearAttachment() { attachedFile=null; clearAttachChip(); }
+
+// ── Voice Input ──
+function toggleVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('您的浏览器不支持语音输入，请使用 Chrome 或 Edge'); return; }
+
+  if (isRecording) {
+    recognition.stop();
+    return;
+  }
+
+  const ta = document.getElementById('user-input');
+  speechBaseText = ta.value;
+  speechBuffer = '';
+
+  recognition = new SR();
+  recognition.lang = 'zh-CN';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    let final = '', interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) final += event.results[i][0].transcript;
+      else interim += event.results[i][0].transcript;
+    }
+    speechBuffer += final;
+    ta.value = speechBaseText + (speechBaseText && speechBuffer ? '\n' : '') + speechBuffer + interim;
+    autoResize(ta);
+  };
+
+  recognition.onend = () => {
+    isRecording = false;
+    document.getElementById('voice-btn').classList.remove('recording');
+    ta.value = speechBaseText + (speechBaseText && speechBuffer ? '\n' : '') + speechBuffer;
+    autoResize(ta);
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error !== 'aborted') alert('语音识别错误：' + e.error);
+    isRecording = false;
+    document.getElementById('voice-btn').classList.remove('recording');
+  };
+
+  recognition.start();
+  isRecording = true;
+  document.getElementById('voice-btn').classList.add('recording');
+}
+
+// ── Export ──
+async function startExport() {
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('doc-content').textContent = '正在生成需求文档，请稍候…';
+  try {
+    const resp = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    document.getElementById('doc-content').textContent = data.document || '（无内容）';
+  } catch(e) {
+    document.getElementById('doc-content').textContent = '生成失败：' + e.message;
+  }
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalOnOverlay(e) { if (e.target===document.getElementById('modal-overlay')) closeModal(); }
+
+async function copyDoc() {
+  const text = document.getElementById('doc-content').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✓ 已复制';
+    setTimeout(() => btn.textContent = orig, 2000);
+  } catch { alert('请手动复制文本'); }
+}
+</script>
+</body>
+</html>

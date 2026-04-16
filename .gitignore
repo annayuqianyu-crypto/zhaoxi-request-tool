@@ -1,0 +1,18 @@
+# 环境变量（含 API Key，绝对不能上传）
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# 临时文件
+pdf_content.txt
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
