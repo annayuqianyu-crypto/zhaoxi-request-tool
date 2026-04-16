@@ -246,6 +246,22 @@
     .pm-stat-num { font-size:20px; font-weight:700; color:var(--navy); }
     .pm-stat-label { font-size:10px; color:#718096; margin-top:2px; }
 
+    /* ── Update Animations ── */
+    @keyframes tabPulse { 0%{} 25%{background:#bee3f8;color:var(--navy);box-shadow:0 0 0 3px rgba(43,108,176,.15)} 100%{} }
+    .tab-btn.flash-update { animation: tabPulse 1s ease; }
+    @keyframes reqBtnPulse { 0%{} 25%{background:#c6f6d5;color:#276749;box-shadow:0 0 0 3px rgba(56,161,105,.15)} 100%{} }
+    .tab-btn.flash-req { animation: reqBtnPulse 1s ease; }
+    @keyframes diagramGlow { 0%{box-shadow:0 0 0 0 rgba(43,108,176,.4)} 60%{box-shadow:0 0 0 10px rgba(43,108,176,0)} 100%{box-shadow:none} }
+    .diagram-glow { animation: diagramGlow 1.2s ease; }
+    @keyframes cardSlideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+    .summary-item, .req-card, .page-mock-wrap { animation: cardSlideIn .35s ease both; }
+    @keyframes toastSlide { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:none} }
+    #update-toast { position:fixed;bottom:28px;right:28px;background:var(--navy);color:white;padding:11px 18px;border-radius:10px;font-size:13px;z-index:9999;pointer-events:none;display:none;box-shadow:0 6px 20px rgba(0,0,0,.25);border-left:3px solid #48bb78; }
+    #update-toast.show { display:flex;align-items:center;gap:8px;animation:toastSlide .3s ease; }
+    .prd-stale-badge { display:inline-block;background:#ed8936;color:white;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;margin-left:5px;vertical-align:middle;letter-spacing:.3px; }
+    @keyframes updateDot { 0%,100%{transform:scale(1)} 50%{transform:scale(1.4)} }
+    .live-dot { width:7px;height:7px;border-radius:50%;background:#48bb78;display:inline-block;margin-right:5px;animation:updateDot 1s ease 3; }
+
     /* ── Export Modal ── */
     #modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:center; justify-content:center; }
     #modal-overlay.open { display:flex; }
@@ -541,6 +557,9 @@
   </div>
 </main>
 
+<!-- ── Update Toast ── -->
+<div id="update-toast"></div>
+
 <!-- ── Export Modal ── -->
 <div id="modal-overlay" onclick="closeModalOnOverlay(event)">
   <div id="modal-box">
@@ -623,10 +642,9 @@ async function sendMessage() {
   setLoading(true);
   history.push({ role: 'user', content: fullContent });
 
-  // Auto-switch to diagram tab on first user message
-  if (history.filter(h => h.role === 'user').length === 1) {
-    switchTabById('diagram');
-  }
+  // 首条消息自动切到流程图；后续消息如果用户在方法论页也切过去
+  const userMsgCount = history.filter(h => h.role === 'user').length;
+  if (userMsgCount === 1) switchTabById('diagram');
 
   try {
     const resp = await fetch('/api/chat', {
@@ -651,14 +669,43 @@ function applyAIResponse(data, addToHistory) {
   addMessage('ai', msg);
   if (addToHistory) history.push({ role: 'assistant', content: msg });
 
-  if (data.mermaid) {
-    currentMermaid = data.mermaid;
-    renderDiagram(data.mermaid);
+  // ── 流程图：每次对话后必定更新渲染 ──
+  if (data.mermaid) currentMermaid = data.mermaid;
+  if (currentMermaid) {
+    renderDiagram(currentMermaid);
+    if (addToHistory) {
+      flashTab('diagram');
+      // 让流程图容器有发光感
+      setTimeout(() => {
+        const wrap = document.getElementById('diagram-wrap');
+        if (wrap) { wrap.classList.remove('diagram-glow'); void wrap.offsetWidth; wrap.classList.add('diagram-glow'); }
+      }, 300);
+      showToast('📊 流程图已更新');
+    }
   }
+
+  // ── 需求清单：累积并每次刷新所有板块 ──
+  const prevCount = currentRequirements.length;
   if (Array.isArray(data.requirements) && data.requirements.length > 0) {
     currentRequirements = data.requirements;
-    renderRequirements(data.requirements);
   }
+  if (currentRequirements.length > 0) {
+    renderRequirements(currentRequirements);
+    if (addToHistory) {
+      if (currentRequirements.length > prevCount) {
+        const added = currentRequirements.length - prevCount;
+        flashTab('req');
+        // 首次有需求时自动切换到需求清单
+        if (prevCount === 0) switchTabById('requirements');
+        showToast(`✅ 已新增 ${added} 条需求`);
+        markPRDStale();
+      } else {
+        // 需求未增加，只轻微闪烁
+        flashTab('req');
+      }
+    }
+  }
+
   if (typeof data.completeness === 'number') setCompleteness(data.completeness);
   if (data.stage) updateStage(data.stage);
 }
@@ -707,8 +754,44 @@ function switchTab(name, btn) {
   document.getElementById('tab-'+name).classList.add('active');
 }
 function switchTabById(name) {
-  const btn = name === 'diagram' ? document.getElementById('tab-diagram-btn') : document.getElementById('tab-req-btn');
-  if(btn) switchTab(name, btn);
+  const ids = { diagram: 'tab-diagram-btn', requirements: 'tab-req-btn' };
+  const btn = document.getElementById(ids[name] || 'tab-diagram-btn');
+  if (btn) switchTab(name, btn);
+}
+
+// ── 视觉反馈 ──
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('update-toast');
+  el.innerHTML = `<span class="live-dot"></span>${msg}`;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+function flashTab(type) {
+  const id = type === 'diagram' ? 'tab-diagram-btn' : 'tab-req-btn';
+  const cls = type === 'diagram' ? 'flash-update' : 'flash-req';
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.classList.remove(cls);
+  void btn.offsetWidth; // reflow restart
+  btn.classList.add(cls);
+  setTimeout(() => btn.classList.remove(cls), 1000);
+}
+
+function markPRDStale() {
+  const prdBtn = document.querySelector('.req-subbtn[onclick*="prd"]');
+  if (prdBtn && !prdBtn.querySelector('.prd-stale-badge')) {
+    const badge = document.createElement('span');
+    badge.className = 'prd-stale-badge';
+    badge.textContent = '待更新';
+    prdBtn.appendChild(badge);
+  }
+}
+function clearPRDStale() {
+  const badge = document.querySelector('.prd-stale-badge');
+  if (badge) badge.remove();
 }
 
 // ── Requirements sub-tab switching ──
@@ -1066,6 +1149,7 @@ function mockCellValue(col, row) {
 
 // ── PRD inline generation ──
 async function generatePRDInline() {
+  clearPRDStale();
   const btn = document.getElementById('gen-prd-btn');
   btn.textContent = '生成中…'; btn.disabled = true;
   try {
