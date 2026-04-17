@@ -2,10 +2,14 @@ import json
 import re
 import io
 import os
-from typing import List, Union
+import sqlite3
+import secrets
+from datetime import datetime
+from typing import List, Union, Optional
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Response
+from fastapi import FastAPI, HTTPException, UploadFile, File, Response, Header
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -17,6 +21,64 @@ client = OpenAI(
     api_key=os.environ.get("WOLFAI_API_KEY"),
     base_url="https://wolfai.top/v1"
 )
+
+# ─────────────────────────────────────────────
+# 数据库初始化（SQLite）
+# ─────────────────────────────────────────────
+DB_PATH = os.environ.get("DB_PATH", "sessions.db")
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS users (
+        id       TEXT PRIMARY KEY,
+        email    TEXT UNIQUE NOT NULL,
+        name     TEXT NOT NULL,
+        token    TEXT UNIQUE NOT NULL,
+        is_admin INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        last_active TEXT
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+        id           TEXT PRIMARY KEY,
+        user_id      TEXT NOT NULL,
+        title        TEXT,
+        history      TEXT,
+        requirements TEXT,
+        mermaid      TEXT,
+        completeness INTEGER DEFAULT 0,
+        created_at   TEXT NOT NULL,
+        updated_at   TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def require_token(authorization: Optional[str] = Header(None)):
+    """从 Authorization: Bearer <token> 中验证用户"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "未登录，请先登录")
+    token = authorization[7:]
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE token=?", (token,)).fetchone()
+    conn.close()
+    if not user:
+        raise HTTPException(401, "登录已失效，请重新登录")
+    return dict(user)
+
+def require_admin(authorization: Optional[str] = Header(None)):
+    user = require_token(authorization)
+    if not user["is_admin"]:
+        raise HTTPException(403, "无管理员权限")
+    return user
 
 # ─────────────────────────────────────────────
 # System prompt：Grill-Me 风格 + 结构化需求输出
@@ -121,6 +183,17 @@ class Message(BaseModel):
     role: str
     content: str
 
+class LoginRequest(BaseModel):
+    name: str
+    email: str
+
+class SaveSessionRequest(BaseModel):
+    session_id: Optional[str] = None
+    title: str
+    history: list
+    requirements: list
+    mermaid: str = ""
+    completeness: int = 0
 
 class ChatRequest(BaseModel):
     history: List[Message]
@@ -687,6 +760,190 @@ async def generate_demo(req: GenerateRequest):
         return {"html": html}
     except Exception as e:
         raise HTTPException(500, f"Demo生成失败：{str(e)}")
+
+
+# ─────────────────────────────────────────────
+# 用户认证 & 会话云端存储
+# ─────────────────────────────────────────────
+
+@app.post("/api/auth/login")
+async def login(req: LoginRequest):
+    """邮箱登录（无密码，内部工具）。首次自动注册，老用户直接返回 token。"""
+    email = req.email.strip().lower()
+    name  = req.name.strip()
+    if not email or "@" not in email:
+        raise HTTPException(400, "请输入有效的邮箱地址")
+    if not name:
+        raise HTTPException(400, "请输入您的姓名")
+
+    admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
+    is_admin = 1 if email == admin_email else 0
+
+    conn = get_db()
+    try:
+        user = conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        now = datetime.now().isoformat()
+        if user:
+            conn.execute("UPDATE users SET name=?, last_active=?, is_admin=? WHERE email=?",
+                         (name, now, max(is_admin, user["is_admin"]), email))
+            conn.commit()
+            return {"token": user["token"], "user_id": user["id"],
+                    "name": name, "is_admin": bool(is_admin or user["is_admin"])}
+        else:
+            uid   = secrets.token_hex(8)
+            token = secrets.token_hex(24)
+            conn.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)",
+                         (uid, email, name, token, is_admin, now, now))
+            conn.commit()
+            return {"token": token, "user_id": uid, "name": name, "is_admin": bool(is_admin)}
+    finally:
+        conn.close()
+
+@app.get("/api/auth/me")
+async def get_me(authorization: Optional[str] = Header(None)):
+    user = require_token(authorization)
+    return {"user_id": user["id"], "name": user["name"],
+            "email": user["email"], "is_admin": bool(user["is_admin"])}
+
+@app.post("/api/sessions/save")
+async def save_session(req: SaveSessionRequest, authorization: Optional[str] = Header(None)):
+    """保存或更新一条会话到服务端"""
+    user = require_token(authorization)
+    now  = datetime.now().isoformat()
+    conn = get_db()
+    try:
+        sid = req.session_id or secrets.token_hex(10)
+        existing = conn.execute("SELECT id FROM sessions WHERE id=? AND user_id=?",
+                                (sid, user["id"])).fetchone()
+        data = (json.dumps(req.history, ensure_ascii=False),
+                json.dumps(req.requirements, ensure_ascii=False),
+                req.mermaid, req.completeness, req.title, now)
+        if existing:
+            conn.execute("""UPDATE sessions SET history=?,requirements=?,mermaid=?,
+                            completeness=?,title=?,updated_at=? WHERE id=?""",
+                         (*data, sid))
+        else:
+            conn.execute("""INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?)""",
+                         (sid, user["id"], req.title,
+                          json.dumps(req.history, ensure_ascii=False),
+                          json.dumps(req.requirements, ensure_ascii=False),
+                          req.mermaid, req.completeness, now, now))
+        conn.commit()
+        return {"session_id": sid, "updated_at": now}
+    finally:
+        conn.close()
+
+@app.get("/api/sessions")
+async def list_sessions(authorization: Optional[str] = Header(None)):
+    """获取当前用户的所有会话列表（不含完整 history）"""
+    user = require_token(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute("""SELECT id,title,completeness,created_at,updated_at
+                               FROM sessions WHERE user_id=? ORDER BY updated_at DESC""",
+                            (user["id"],)).fetchall()
+        return {"sessions": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+@app.get("/api/sessions/{session_id}")
+async def get_session(session_id: str, authorization: Optional[str] = Header(None)):
+    """获取单条会话完整内容"""
+    user = require_token(authorization)
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM sessions WHERE id=? AND user_id=?",
+                           (session_id, user["id"])).fetchone()
+        if not row:
+            raise HTTPException(404, "会话不存在")
+        d = dict(row)
+        d["history"]      = json.loads(d["history"] or "[]")
+        d["requirements"] = json.loads(d["requirements"] or "[]")
+        return d
+    finally:
+        conn.close()
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str, authorization: Optional[str] = Header(None)):
+    user = require_token(authorization)
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM sessions WHERE id=? AND user_id=?",
+                     (session_id, user["id"]))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+# ─────────────────────────────────────────────
+# 管理员看板
+# ─────────────────────────────────────────────
+
+@app.get("/api/admin/stats")
+async def admin_stats(authorization: Optional[str] = Header(None)):
+    require_admin(authorization)
+    conn = get_db()
+    try:
+        users    = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+        active   = conn.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM sessions WHERE updated_at > datetime('now','-7 days')"
+        ).fetchone()[0]
+        return {"total_users": users, "total_sessions": sessions, "active_7d": active}
+    finally:
+        conn.close()
+
+@app.get("/api/admin/users")
+async def admin_users(authorization: Optional[str] = Header(None)):
+    require_admin(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT u.id, u.name, u.email, u.created_at, u.last_active,
+                   COUNT(s.id) as session_count,
+                   MAX(s.updated_at) as last_session,
+                   MAX(s.completeness) as max_completeness
+            FROM users u
+            LEFT JOIN sessions s ON s.user_id = u.id
+            WHERE u.is_admin = 0
+            GROUP BY u.id ORDER BY u.last_active DESC
+        """).fetchall()
+        return {"users": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+@app.get("/api/admin/users/{user_id}/sessions")
+async def admin_user_sessions(user_id: str, authorization: Optional[str] = Header(None)):
+    require_admin(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute("""SELECT id,title,completeness,created_at,updated_at
+                               FROM sessions WHERE user_id=? ORDER BY updated_at DESC""",
+                            (user_id,)).fetchall()
+        return {"sessions": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+@app.get("/api/admin/sessions/{session_id}")
+async def admin_get_session(session_id: str, authorization: Optional[str] = Header(None)):
+    require_admin(authorization)
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "会话不存在")
+        d = dict(row)
+        d["history"]      = json.loads(d["history"] or "[]")
+        d["requirements"] = json.loads(d["requirements"] or "[]")
+        return d
+    finally:
+        conn.close()
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page():
+    """管理员看板页面"""
+    return HTMLResponse(open("static/admin.html", encoding="utf-8").read()
+                        if os.path.exists("static/admin.html") else "<h1>管理页面未找到</h1>")
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
