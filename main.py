@@ -223,6 +223,11 @@ class GenerateRequest(BaseModel):
     requirements: List[Union[dict, str]]
     type: str  # summary | wireframe | preview | flowchart
 
+class DemoRequest(BaseModel):
+    history: List[Message]
+    requirements: List[Union[dict, str]] = []
+    mermaid: str = ""
+
 
 # ─────────────────────────────────────────────
 # File extraction helpers
@@ -707,10 +712,10 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
 
 @app.post("/api/generate-demo")
-async def generate_demo(req: GenerateRequest):
+async def generate_demo(req: DemoRequest):
     """根据需求访谈内容生成可交互的HTML原型Demo"""
     history_text = "\n".join(
-        f"{'用户' if m['role']=='user' else 'AI分析师'}: {m['content'][:300]}"
+        f"{'用户' if m.role=='user' else 'AI分析师'}: {m.content[:300]}"
         for m in req.history[-30:]
     )
     req_text = ""
