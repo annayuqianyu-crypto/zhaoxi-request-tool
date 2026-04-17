@@ -427,6 +427,26 @@
     .btn-success { background:#38a169; color:white; }
     .btn-success:hover { background:#2f855a; }
 
+    /* ── Login Modal ── */
+    #login-modal { display:none; position:fixed; inset:0; z-index:9998; background:rgba(10,22,40,.78); backdrop-filter:blur(6px); align-items:center; justify-content:center; }
+    #login-modal.open { display:flex; }
+    .login-box { background:white; border-radius:20px; width:420px; max-width:92vw; padding:38px 34px 28px; box-shadow:0 24px 64px rgba(0,0,0,.45); text-align:center; }
+    .login-logo { font-size:30px; font-weight:800; color:var(--navy); margin-bottom:4px; letter-spacing:-.5px; }
+    .login-logo span { color:#48bb78; }
+    .login-sub { font-size:13px; color:#718096; margin-bottom:26px; line-height:1.75; }
+    .login-field { text-align:left; margin-bottom:14px; }
+    .login-field label { display:block; font-size:12px; font-weight:600; color:#4a5568; margin-bottom:5px; }
+    .login-field input { width:100%; padding:10px 14px; border:1.5px solid var(--border); border-radius:9px; font-size:14px; outline:none; font-family:inherit; transition:border-color .2s; box-sizing:border-box; }
+    .login-field input:focus { border-color:var(--blue); }
+    .login-btn { width:100%; padding:12px; background:var(--navy); color:white; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; transition:background .2s; margin-top:4px; margin-bottom:12px; }
+    .login-btn:hover { background:#2a4a7f; }
+    .login-btn:disabled { background:#a0aec0; cursor:not-allowed; }
+    .login-skip { font-size:12px; color:#a0aec0; cursor:pointer; text-decoration:underline; }
+    .login-skip:hover { color:#718096; }
+    .login-error { font-size:12px; color:#e53e3e; margin-bottom:8px; min-height:18px; text-align:left; }
+    .login-user-info { display:flex; align-items:center; gap:6px; }
+    .login-user-avatar { width:24px; height:24px; border-radius:50%; background:#48bb78; color:white; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
     /* ── Function Definition Tab ── */
     #tab-definition.active { overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; }
     .def-intro { text-align:center; padding:4px 0 2px; }
@@ -530,6 +550,25 @@
   </div>
 </div>
 
+<!-- ── Login Modal ── -->
+<div id="login-modal">
+  <div class="login-box">
+    <div class="login-logo">需求<span>打磨</span>工作台</div>
+    <div class="login-sub">请使用公司邮箱登录<br>您的会话记录将安全保存在云端，支持跨设备查看</div>
+    <div class="login-field">
+      <label for="login-email">邮箱地址</label>
+      <input id="login-email" type="email" placeholder="yourname@company.com" onkeydown="if(event.key==='Enter')document.getElementById('login-name').focus()">
+    </div>
+    <div class="login-field">
+      <label for="login-name">姓名（首次登录自动注册）</label>
+      <input id="login-name" type="text" placeholder="您的名字" onkeydown="if(event.key==='Enter')loginUser()">
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <button class="login-btn" id="login-btn" onclick="loginUser()">登录 / 注册</button>
+    <div class="login-skip" onclick="skipLogin()">暂不登录，以访客身份体验</div>
+  </div>
+</div>
+
 <!-- ── Header ── -->
 <header>
   <div style="display:flex;align-items:center">
@@ -537,6 +576,7 @@
     <div class="badge">家族财富 · 全球税务 · 资本市场 · 法律咨询 · 企业治理</div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
+    <div id="user-display" style="display:none" class="login-user-info" onclick="logoutUser()" title="点击退出登录" style="cursor:pointer"></div>
     <span class="session-name-label" id="current-session-label" title="当前会话"></span>
     <div class="progress-wrap">
       <span class="progress-label">完整度</span>
@@ -1096,6 +1136,7 @@
       <button class="btn btn-success" onclick="saveCurrentSession(null)" style="font-size:12px;padding:6px 14px;">💾 保存当前会话</button>
       <button class="btn btn-secondary" onclick="saveCurrentSessionAs()" style="font-size:12px;padding:6px 14px;">✏️ 另存为…</button>
       <button class="btn" onclick="newSession()" style="font-size:12px;padding:6px 14px;background:var(--navy);color:white;border-radius:8px;border:none;cursor:pointer;font-weight:600;">➕ 新建任务</button>
+      <button class="btn" onclick="syncServerSessions()" style="font-size:12px;padding:6px 14px;background:#ebf8ff;color:#2b6cb0;border:1px solid #bee3f8;border-radius:8px;cursor:pointer;font-weight:600;" title="从服务器同步云端记录">☁️ 同步云端</button>
     </div>
     <div id="sessions-list">
       <div style="text-align:center;color:#a0aec0;padding:32px;font-size:13px;">暂无保存的任务<br>点击「保存当前会话」开始记录</div>
@@ -2421,6 +2462,8 @@ function saveCurrentSession(customName) {
   updateCurrentSessionLabel(name);
   showToast('💾 已保存：' + name);
   if (document.getElementById('sessions-modal').classList.contains('open')) renderSessionsList();
+  // 同步到服务端（登录用户）
+  saveToServer(session);
 }
 
 function saveCurrentSessionAs() {
@@ -2535,10 +2578,12 @@ function renderSessionsList() {
     const date = new Date(s.savedAt);
     const dateStr = date.toLocaleDateString('zh-CN', {month:'numeric', day:'numeric'}) + ' ' + date.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
     const msgCount = (s.history || []).filter(h => h.role === 'user').length;
+    const cloudBadge = s.fromServer ? '<span style="background:#ebf8ff;color:#2b6cb0;font-size:9px;padding:1px 6px;border-radius:7px;font-weight:700;">☁️ 云端</span>' : '';
     return `<div class="session-card ${isCurrent ? 'active-session' : ''}" onclick="loadSession('${s.id}')">
       <div class="session-card-top">
         <span class="session-card-name" title="${esc(s.name)}">${esc(s.name)}</span>
         ${isCurrent ? '<span class="session-current-badge">当前</span>' : ''}
+        ${cloudBadge}
         <button class="session-card-del" onclick="deleteSession('${s.id}',event)" title="删除">✕</button>
       </div>
       <div class="session-card-meta">
@@ -2685,6 +2730,8 @@ function renderDefinitionResult(d) {
     // 本次会话已选过，直接沿用
     document.getElementById('device-splash').style.display = 'none';
     if (pref === 'mobile') document.body.classList.add('mobile-mode');
+    // 尝试恢复登录状态
+    tryAutoLogin();
   }
   // 否则保持 splash 显示，等用户点击选择
 })();
@@ -2694,6 +2741,13 @@ function selectDevice(type) {
   document.getElementById('device-splash').style.display = 'none';
   if (type === 'mobile') document.body.classList.add('mobile-mode');
   else document.body.classList.remove('mobile-mode');
+  // 已登录则直接进入，否则弹登录框
+  if (!userToken) {
+    document.getElementById('login-modal').classList.add('open');
+    setTimeout(() => document.getElementById('login-email').focus(), 150);
+  } else {
+    tryAutoLogin();
+  }
 }
 
 function switchDevice() {
@@ -2891,6 +2945,118 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initDesktopOpener);
 } else {
   initDesktopOpener();
+}
+
+// ══════════════════════════════════════════
+// ── 用户登录 & 服务端会话同步 ──
+// ══════════════════════════════════════════
+
+let userToken = localStorage.getItem('zhaoxi_token') || null;
+let userInfo = (() => {
+  try { return JSON.parse(localStorage.getItem('zhaoxi_user') || 'null'); } catch { return null; }
+})();
+
+async function loginUser() {
+  const email = (document.getElementById('login-email').value || '').trim();
+  const name  = (document.getElementById('login-name').value || '').trim() || email.split('@')[0];
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; return; }
+  errEl.textContent = '';
+  btn.disabled = true; btn.textContent = '登录中…';
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    userToken = data.token;
+    userInfo  = data.user;
+    localStorage.setItem('zhaoxi_token', userToken);
+    localStorage.setItem('zhaoxi_user', JSON.stringify(userInfo));
+    document.getElementById('login-modal').classList.remove('open');
+    updateUserDisplay();
+    showToast('👋 欢迎，' + userInfo.name + '！云端记录已开启');
+    syncServerSessions();
+  } catch(e) {
+    errEl.textContent = '登录失败，请稍后重试';
+    btn.disabled = false; btn.textContent = '登录 / 注册';
+  }
+}
+
+function skipLogin() {
+  document.getElementById('login-modal').classList.remove('open');
+  showToast('💡 访客模式：记录仅保存在本设备');
+}
+
+function tryAutoLogin() {
+  if (userToken && userInfo) {
+    updateUserDisplay();
+    // 静默验证 token 有效性
+    fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + userToken } })
+      .then(r => { if (!r.ok) { userToken=null; userInfo=null; localStorage.removeItem('zhaoxi_token'); localStorage.removeItem('zhaoxi_user'); updateUserDisplay(); } else { syncServerSessions(); } })
+      .catch(() => {});
+  }
+}
+
+function updateUserDisplay() {
+  const el = document.getElementById('user-display');
+  if (!el) return;
+  if (!userInfo) { el.style.display = 'none'; return; }
+  const initial = (userInfo.name || '?').slice(0,1).toUpperCase();
+  el.style.display = 'flex';
+  el.style.cursor = 'pointer';
+  el.innerHTML = `<div class="login-user-avatar">${initial}</div><span style="font-size:12px;color:rgba(255,255,255,.85)">${userInfo.name}</span>`;
+}
+
+function logoutUser() {
+  if (!userInfo) return;
+  if (!confirm('确认退出登录？')) return;
+  localStorage.removeItem('zhaoxi_token');
+  localStorage.removeItem('zhaoxi_user');
+  userToken = null; userInfo = null;
+  updateUserDisplay();
+  showToast('已退出登录');
+}
+
+// ── 服务端会话同步 ──
+async function syncServerSessions() {
+  if (!userToken) return;
+  try {
+    const resp = await fetch('/api/sessions', { headers: { 'Authorization': 'Bearer ' + userToken } });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const local = getSessions();
+    const localIds = new Set(local.map(s => s.id));
+    const remotes = (data.sessions || [])
+      .filter(s => !localIds.has(s.id))
+      .map(s => ({
+        id: s.id, name: s.title || '云端会话', savedAt: s.updated_at,
+        history: s.history || [], requirements: s.requirements || [],
+        mermaid: s.mermaid || '', completeness: s.completeness || 0, fromServer: true
+      }));
+    if (remotes.length) {
+      saveSessions([...local, ...remotes]);
+      if (document.getElementById('sessions-modal').classList.contains('open')) renderSessionsList();
+      showToast('☁️ 已同步 ' + remotes.length + ' 条云端记录');
+    }
+  } catch {}
+}
+
+async function saveToServer(session) {
+  if (!userToken) return;
+  try {
+    await fetch('/api/sessions/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + userToken },
+      body: JSON.stringify({
+        session_id: session.id, title: session.name,
+        history: session.history, requirements: session.requirements,
+        mermaid: session.mermaid, completeness: session.completeness
+      })
+    });
+  } catch {}
 }
 </script>
 </body>
