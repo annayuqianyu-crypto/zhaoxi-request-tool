@@ -276,17 +276,33 @@ def extract_pptx(content: bytes) -> str:
 
 def parse_ai_response(raw: str) -> dict:
     cleaned = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
+    # 第一次尝试直接解析
     try:
         return json.loads(cleaned)
     except Exception:
-        match = re.search(r"\{[\s\S]*\}", cleaned)
-        if match:
-            try:
-                return json.loads(match.group())
-            except Exception:
-                pass
+        pass
+    # 第二次：把 mermaid 字段里的真实换行替换为 \n，再解析
+    try:
+        fixed = re.sub(
+            r'("mermaid"\s*:\s*")(.*?)(")',
+            lambda m: m.group(1) + m.group(2).replace('\n', '\\n').replace('\r', '') + m.group(3),
+            cleaned, flags=re.DOTALL
+        )
+        return json.loads(fixed)
+    except Exception:
+        pass
+    # 第三次：正则提取最外层 JSON 对象
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if match:
+        try:
+            return json.loads(match.group())
+        except Exception:
+            pass
+    # 最终 fallback：只提取 message 文字（不泄漏 Mermaid 代码）
+    msg_match = re.search(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', cleaned)
+    fallback_msg = msg_match.group(1).encode().decode('unicode_escape') if msg_match else "AI 正在分析中，请稍候…"
     return {
-        "message": raw,
+        "message": fallback_msg,
         "mermaid": "graph TD\n    A[业务场景] --> B[待完善]",
         "requirements": [],
         "stage": "exploring",
@@ -441,10 +457,10 @@ async def generate_section(req: GenerateRequest):
 {history_text}
 
 要求：
-- 使用 graph LR 方向（横向流程，适合多方案并排）
+- 使用 graph TD 方向（竖向流程，便于上下阅读）
 - 如有多个实现方案或路径，用 subgraph 分别展示（如 subgraph 方案一、subgraph 方案二）
 - 矩形节点表示操作步骤，菱形{{}}表示判断节点，圆角([])表示开始/结束
-- 中文标签，每个标签不超过8字
+- 中文标签，每个标签不超过10字
 - 添加以下 classDef：
   classDef user fill:#fff3cd,stroke:#f59e0b,color:#92400e
   classDef system fill:#dbeafe,stroke:#3b82f6,color:#1e40af

@@ -1233,21 +1233,22 @@ async function sendMessage() {
 
 function applyAIResponse(data, addToHistory) {
   removeTyping();
-  const msg = data.message || '';
+  let msg = data.message || '';
+  // 防止 AI 把 Mermaid 代码或原始 JSON 泄漏到聊天气泡
+  if (/^\s*(\{|\[|graph\s+(TD|LR|BT|RL)|sequenceDiagram|classDiagram)/.test(msg)) {
+    msg = '（分析已更新，请查看右侧流程图面板）';
+  }
   addMessage('ai', msg);
   if (addToHistory) history.push({ role: 'assistant', content: msg });
 
-  // ── 流程图 ──
+  // ── 流程图（只更新右侧"访谈流程"Tab，不在聊天区显示）──
   if (data.mermaid) currentMermaid = data.mermaid;
-  if (!addToHistory && currentMermaid) {
-    // 初始化：仅渲染到"业务流程图"Tab，锁定不变
-    renderMainDiagram(currentMermaid);
-  }
-  // 对话流程图（需求清单→流程图）：有新内容时自动同步
-  if (addToHistory && currentMermaid) {
-    renderConvDiagram(currentMermaid);
-    flashTab('diagram');
-    showToast('📊 流程图已更新');
+  if (currentMermaid) {
+    renderMainDiagram(currentMermaid);   // 每次都更新，不锁定
+    if (addToHistory) {
+      flashTab('diagram');
+      showToast('📊 流程图已更新');
+    }
   }
 
   // ── 需求清单：累积并每次刷新所有板块 ──
@@ -1393,21 +1394,16 @@ function setCompleteness(pct) {
 
 // ── Diagram ──
 let diagCounter = 0;
-let reqDiagramScale = 1;
-let mainDiagramLocked = false; // 业务流程图 Tab 仅渲染一次，永不覆盖
 
-// 仅渲染到右侧"业务流程图"Tab（只调用一次）
+// 渲染到右侧"访谈流程"Tab，每次对话都更新
 async function renderMainDiagram(code) {
-  if (mainDiagramLocked) return;
   diagCounter++;
   await renderMermaidInto('diagram-wrap', 'mmd-main-'+diagCounter, code, diagramScale);
-  mainDiagramLocked = true;
 }
 
-// 渲染到需求清单→流程图（每次对话都更新）
+// 兼容旧调用
 async function renderConvDiagram(code) {
-  diagCounter++;
-  await renderMermaidInto('req-flow-wrap', 'mmd-req-'+diagCounter, code, reqDiagramScale);
+  await renderMainDiagram(code);
 }
 
 // 兼容旧调用
