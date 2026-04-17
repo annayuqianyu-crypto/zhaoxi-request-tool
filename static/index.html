@@ -1171,6 +1171,12 @@ let diagramScale = 1;
 let attachedFile = null;  // { filename, extracted_text }
 let currentSessionId = null;  // 当前会话 ID
 
+// ── 用户认证状态（必须在 IIFE 之前声明，避免 TDZ 报错）──
+let userToken = localStorage.getItem('zhaoxi_token') || null;
+let userInfo = (function() {
+  try { return JSON.parse(localStorage.getItem('zhaoxi_user') || 'null'); } catch { return null; }
+})();
+
 // Voice
 let recognition = null;
 let isRecording = false;
@@ -2598,7 +2604,7 @@ function renderSessionsList() {
 
 // 页面加载时检查自动存档，提示恢复
 window.addEventListener('DOMContentLoaded', () => {
-  initDesktopOpener();
+  setTimeout(initDesktopOpener, 0);
   try {
     const autosave = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null');
     if (autosave && autosave.history && autosave.history.length > 0) {
@@ -2730,8 +2736,8 @@ function renderDefinitionResult(d) {
     // 本次会话已选过，直接沿用
     document.getElementById('device-splash').style.display = 'none';
     if (pref === 'mobile') document.body.classList.add('mobile-mode');
-    // 尝试恢复登录状态
-    tryAutoLogin();
+    // 延迟恢复登录状态，确保所有函数和变量已完成初始化
+    setTimeout(function() { tryAutoLogin(); }, 0);
   }
   // 否则保持 splash 显示，等用户点击选择
 })();
@@ -2951,10 +2957,7 @@ if (document.readyState === 'loading') {
 // ── 用户登录 & 服务端会话同步 ──
 // ══════════════════════════════════════════
 
-let userToken = localStorage.getItem('zhaoxi_token') || null;
-let userInfo = (() => {
-  try { return JSON.parse(localStorage.getItem('zhaoxi_user') || 'null'); } catch { return null; }
-})();
+// userToken / userInfo 已在脚本顶部声明
 
 async function loginUser() {
   const email = (document.getElementById('login-email').value || '').trim();
