@@ -603,16 +603,28 @@ async def transcribe_audio(file: UploadFile = File(...)):
     """接收录音文件，调用 Whisper 转文字"""
     try:
         audio_bytes = await file.read()
+        if not audio_bytes:
+            return {"error": "收到空文件，请重新录音"}
+
         fname = file.filename or "audio.webm"
-        # OpenAI Whisper transcription
+        content_type = file.content_type or "audio/webm"
+        print(f"[transcribe] 收到文件: {fname}, 类型: {content_type}, 大小: {len(audio_bytes)} bytes")
+
+        # 尝试调用 Whisper
         transcript = client.audio.transcriptions.create(
             model="whisper-1",
-            file=(fname, audio_bytes, file.content_type or "audio/webm"),
+            file=(fname, audio_bytes, content_type),
             language="zh"
         )
-        return {"text": transcript.text}
+        text = transcript.text.strip()
+        print(f"[transcribe] 识别结果: {text[:80]}")
+        return {"text": text}
+
     except Exception as e:
-        raise HTTPException(500, f"语音识别失败：{str(e)}")
+        err_msg = str(e)
+        print(f"[transcribe] 错误: {err_msg}")
+        # 返回 200 + error 字段，前端可以显示具体原因
+        return {"text": "", "error": f"识别失败：{err_msg[:200]}"}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

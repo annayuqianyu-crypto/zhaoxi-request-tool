@@ -1904,86 +1904,193 @@ function showAttachChip(name, charCount, loading) {
 function clearAttachChip() { const el=document.getElementById('current-chip'); if(el) el.remove(); }
 function clearAttachment() { attachedFile=null; clearAttachChip(); }
 
-// ── Voice Input ──
-// ── 语音录音 + Whisper 转文字 ──
+// ══════════════════════════════════════════
+// ── 语音输入（双引擎）──
+// 引擎1：Web Speech API（实时识别，Chrome/Android原生支持）
+// 引擎2：MediaRecorder + 后端Whisper（兜底，适用iOS等）
+// ══════════════════════════════════════════
 let mediaRecorder = null;
 let audioChunks = [];
+let wsRecognition = null; // Web Speech API 实例
+
+const MIC_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
+const SPIN_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="40" stroke-dashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>`;
+
+function voiceBtnReset(btn) {
+  btn.innerHTML = MIC_ICON;
+  btn.disabled = false;
+  btn.title = '语音输入';
+  btn.classList.remove('recording');
+}
+
+function insertTranscript(text) {
+  if (!text || !text.trim()) return;
+  const ta = document.getElementById('user-input');
+  const sep = ta.value.trim() ? ' ' : '';
+  ta.value = ta.value.trim() + sep + text.trim();
+  autoResize(ta);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = ta.value.length;
+}
 
 async function toggleVoice() {
   const btn = document.getElementById('voice-btn');
 
-  // 正在录音 → 停止
+  // ── 正在录音 → 停止 ──
   if (isRecording) {
-    mediaRecorder && mediaRecorder.stop();
+    if (wsRecognition) wsRecognition.stop();
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     return;
   }
 
-  // 请求麦克风权限
+  // ── 引擎1：Web Speech API（Chrome/Android首选） ──
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    wsRecognition = new SR();
+    wsRecognition.lang = 'zh-CN';
+    wsRecognition.continuous = true;
+    wsRecognition.interimResults = true;
+
+    let finalText = '';
+    const baseText = document.getElementById('user-input').value;
+
+    wsRecognition.onstart = () => {
+      isRecording = true;
+      btn.classList.add('recording');
+      btn.title = '点击停止录音';
+      showToast('🎙️ 正在聆听…点击话筒停止');
+    };
+
+    wsRecognition.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      const ta = document.getElementById('user-input');
+      const sep = baseText.trim() ? ' ' : '';
+      ta.value = baseText.trim() + sep + finalText + interim;
+      autoResize(ta);
+    };
+
+    wsRecognition.onerror = (e) => {
+      // 'not-allowed' 或 'service-not-available' 时降级到 MediaRecorder
+      if (e.error === 'not-allowed') {
+        showToast('⚠️ 麦克风权限被拒，请在浏览器设置中允许');
+      } else if (e.error === 'service-not-available' || e.error === 'network') {
+        showToast('⚠️ 语音服务不可用，切换备用方案…');
+        isRecording = false;
+        voiceBtnReset(btn);
+        // 降级到 MediaRecorder+Whisper
+        setTimeout(() => startMediaRecorder(btn), 300);
+        return;
+      }
+      isRecording = false;
+      voiceBtnReset(btn);
+    };
+
+    wsRecognition.onend = () => {
+      isRecording = false;
+      voiceBtnReset(btn);
+      if (finalText.trim()) showToast('✅ 识别完成，可继续补充后发送');
+    };
+
+    try {
+      wsRecognition.start();
+    } catch(e) {
+      // Web Speech 启动失败，降级
+      wsRecognition = null;
+      startMediaRecorder(btn);
+    }
+    return;
+  }
+
+  // ── 引擎2：MediaRecorder + 后端Whisper（兜底） ──
+  startMediaRecorder(btn);
+}
+
+async function startMediaRecorder(btn) {
+  // 检查 MediaRecorder 支持
+  if (!window.MediaRecorder || !navigator.mediaDevices) {
+    showToast('❌ 当前浏览器不支持录音，请使用 Chrome 或 Safari 最新版');
+    return;
+  }
+
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch(e) {
-    alert('无法获取麦克风权限，请在浏览器设置中允许使用麦克风');
+    const msg = e.name === 'NotAllowedError' ? '麦克风权限被拒，请在浏览器设置中允许后重试' : '无法访问麦克风：' + e.message;
+    showToast('⚠️ ' + msg);
     return;
   }
 
-  // 选择支持的格式
-  const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg','audio/mp4']
-    .find(t => MediaRecorder.isTypeSupported(t)) || '';
+  // 选择最佳音频格式
+  const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg']
+    .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch(_){ return false; } }) || '';
 
   audioChunks = [];
-  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  try {
+    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  } catch(e) {
+    mediaRecorder = new MediaRecorder(stream);
+  }
+
+  mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
 
   mediaRecorder.onstop = async () => {
-    // 停止所有音轨
     stream.getTracks().forEach(t => t.stop());
     isRecording = false;
     btn.classList.remove('recording');
     btn.title = '语音输入';
 
-    if (audioChunks.length === 0) return;
+    if (!audioChunks.length) { voiceBtnReset(btn); return; }
 
-    // 显示转写中状态
-    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+    btn.innerHTML = SPIN_ICON;
     btn.disabled = true;
-    showToast('🎙️ 正在识别语音…');
+    showToast('⏳ 正在识别语音，请稍候…');
 
     try {
-      const blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
-      const ext = (mimeType || 'audio/webm').includes('mp4') ? 'mp4' : (mimeType||'').includes('ogg') ? 'ogg' : 'webm';
-      const formData = new FormData();
-      formData.append('file', blob, `recording.${ext}`);
+      const actualMime = mediaRecorder.mimeType || mimeType || 'audio/webm';
+      const ext = actualMime.includes('mp4') ? 'mp4' : actualMime.includes('ogg') ? 'ogg' : 'webm';
+      const blob = new Blob(audioChunks, { type: actualMime });
+      const fd = new FormData();
+      fd.append('file', blob, `rec.${ext}`);
 
-      const resp = await fetch('/api/transcribe', { method: 'POST', body: formData });
+      const resp = await fetch('/api/transcribe', { method: 'POST', body: fd });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`服务返回 ${resp.status}: ${err.slice(0,120)}`);
+      }
       const data = await resp.json();
 
-      if (data.text) {
-        const ta = document.getElementById('user-input');
-        const sep = ta.value.trim() ? '\n' : '';
-        ta.value = ta.value.trim() + sep + data.text;
-        autoResize(ta);
-        ta.focus();
-        ta.selectionStart = ta.selectionEnd = ta.value.length;
-        showToast('✅ 语音识别完成');
+      if (data.text && data.text.trim()) {
+        insertTranscript(data.text);
+        showToast('✅ 识别完成，请检查后发送');
+      } else if (data.error) {
+        showToast('❌ ' + data.error);
       } else {
-        showToast('⚠️ 未能识别，请重试');
+        showToast('⚠️ 未识别到内容，请重新录音');
       }
     } catch(e) {
       showToast('❌ 识别失败：' + e.message);
+      console.error('[transcribe]', e);
     } finally {
-      // 恢复按钮
-      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
-      btn.disabled = false;
-      btn.title = '语音输入';
+      voiceBtnReset(btn);
     }
   };
 
-  mediaRecorder.start();
+  mediaRecorder.onerror = (e) => {
+    showToast('❌ 录音出错：' + (e.error?.message || '未知错误'));
+    isRecording = false;
+    voiceBtnReset(btn);
+  };
+
+  mediaRecorder.start(500); // 每500ms收一次数据，避免iOS丢包
   isRecording = true;
   btn.classList.add('recording');
   btn.title = '点击停止录音';
-  showToast('🎙️ 录音中…点击话筒停止');
+  showToast('🎙️ 录音中… 说完后点击话筒停止');
 }
 
 // ── Export ──
