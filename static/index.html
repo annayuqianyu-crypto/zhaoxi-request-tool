@@ -2703,8 +2703,20 @@ function renderDefinitionResult(d) {
     // 本次会话已选过，直接沿用
     document.getElementById('device-splash').style.display = 'none';
     if (pref === 'mobile') document.body.classList.add('mobile-mode');
-    // 延迟恢复登录状态，确保所有函数和变量已完成初始化
-    setTimeout(function() { tryAutoLogin(); }, 0);
+    // 延迟执行，确保所有变量完成初始化
+    setTimeout(function() {
+      if (userToken) {
+        tryAutoLogin();       // 已登录：静默验证并同步
+      } else {
+        // 未登录：弹出登录框，让用户选择登录或访客
+        const modal = document.getElementById('login-modal');
+        if (modal) {
+          modal.classList.add('open');
+          const emailInput = document.getElementById('login-email');
+          if (emailInput) emailInput.focus();
+        }
+      }
+    }, 0);
   }
   // 否则保持 splash 显示，等用户点击选择
 })();

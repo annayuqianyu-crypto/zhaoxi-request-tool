@@ -191,9 +191,10 @@ async function doLogin() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({name, email})
     }).then(r=>r.json());
-    if (!data.is_admin) { errEl.textContent = '该邮箱无管理员权限，请联系系统管理员'; return; }
+    const userObj = data.user || data;   // 兼容两种响应结构
+    if (!userObj.is_admin) { errEl.textContent = '该邮箱无管理员权限，请联系系统管理员'; return; }
     token = data.token;
-    currentUser = data;
+    currentUser = { name: userObj.name, email: userObj.email, is_admin: userObj.is_admin };
     localStorage.setItem('admin_token', token);
     initApp();
   } catch(e) { errEl.textContent = '登录失败：' + e.message; }
