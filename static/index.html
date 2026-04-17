@@ -809,6 +809,7 @@
         <button class="req-subbtn" onclick="switchReqSub('preview',this)">🖥️ 页面展示</button>
         <button class="req-subbtn" onclick="switchReqSub('flowchart',this)">🔄 流程图</button>
         <button class="req-subbtn" onclick="switchReqSub('prd',this)">📄 PRD文档</button>
+        <button class="req-subbtn" onclick="switchReqSub('demo',this)" id="demo-tab-btn">🚀 需求Demo</button>
       </div>
 
       <!-- 📝 需求梳理 -->
@@ -951,6 +952,43 @@
           </div>
         </div>
       </div>
+
+      <!-- 🚀 需求Demo -->
+      <div id="req-sub-demo" class="req-sub">
+        <div class="gen-header">
+          <div class="gen-header-left">
+            <span class="gen-icon">🚀</span>
+            <div>
+              <div class="gen-title">需求原型Demo</div>
+              <div class="gen-subtitle">AI根据访谈内容生成可交互原型，让您直观感受产品是否符合预期</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button class="exp-btn" id="demo-open-btn" onclick="openDemoNewTab()" style="display:none;" title="在新标签页全屏体验">↗ 全屏</button>
+            <button class="exp-btn" id="demo-dl-btn" onclick="downloadDemo()" style="display:none;" title="下载HTML文件">📥 下载</button>
+            <button class="gen-btn" id="gen-demo-btn" onclick="generateDemo()">⚡ 生成Demo</button>
+          </div>
+        </div>
+        <div class="gen-content-wrap" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
+          <div id="demo-empty-tip" style="text-align:center;padding:32px 10px;">
+            <div style="font-size:36px;margin-bottom:12px;">🎮</div>
+            <p style="font-size:13px;color:#718096;margin:0 0 8px;line-height:1.8;">完成需求访谈后，点击「⚡ 生成Demo」<br>AI将根据您的需求描述生成一个可操作的原型</p>
+            <p style="font-size:11px;color:#a0aec0;margin:0;">原型包含模拟数据和核心交互，用于确认需求方向是否正确<br>不是最终产品，仅供需求验证使用</p>
+          </div>
+          <div id="demo-result-wrap" style="display:none;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px;">
+              <span style="font-size:12px;color:#48bb78;font-weight:600;">✅ Demo已生成，可在下方交互体验</span>
+              <button onclick="generateDemo()" style="font-size:11px;color:#718096;background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;cursor:pointer;">重新生成</button>
+            </div>
+            <iframe id="demo-iframe"
+              style="width:100%;height:560px;border:1.5px solid var(--border);border-radius:10px;background:white;"
+              sandbox="allow-scripts allow-forms allow-same-origin"
+              title="需求原型Demo">
+            </iframe>
+          </div>
+        </div>
+      </div>
+
     </div>
     <!-- Tab 4: Function Definition -->
     <div class="panel-content" id="tab-definition">
@@ -1826,6 +1864,66 @@ function resetWireframeZoom() {
   wireframeScale = 1;
   const s = document.querySelector('#wireframe-diagram-wrap svg');
   if (s) s.style.transform = 'scale(1)';
+}
+
+// ── 需求Demo 生成 ──
+let currentDemoHtml = '';
+
+async function generateDemo() {
+  if (!history.length) { alert('请先进行需求访谈，再生成Demo'); return; }
+  const btn = document.getElementById('gen-demo-btn');
+  btn.textContent = '生成中…'; btn.disabled = true;
+
+  document.getElementById('demo-empty-tip').style.display = 'none';
+  document.getElementById('demo-result-wrap').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/generate-demo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (!data.html) throw new Error('未返回HTML内容');
+
+    currentDemoHtml = data.html;
+
+    // 写入 iframe
+    const iframe = document.getElementById('demo-iframe');
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(data.html);
+    doc.close();
+
+    document.getElementById('demo-result-wrap').style.display = 'flex';
+    document.getElementById('demo-open-btn').style.display = '';
+    document.getElementById('demo-dl-btn').style.display = '';
+    showToast('🚀 需求Demo已生成，可在下方交互体验');
+  } catch(e) {
+    document.getElementById('demo-empty-tip').style.display = 'block';
+    showToast('❌ Demo生成失败：' + e.message);
+  } finally {
+    btn.textContent = '⚡ 生成Demo'; btn.disabled = false;
+  }
+}
+
+function openDemoNewTab() {
+  if (!currentDemoHtml) return;
+  const win = window.open('', '_blank');
+  win.document.open();
+  win.document.write(currentDemoHtml);
+  win.document.close();
+}
+
+function downloadDemo() {
+  if (!currentDemoHtml) return;
+  const blob = new Blob([currentDemoHtml], { type: 'text/html;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '需求原型Demo.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // ── PRD 生成 ──

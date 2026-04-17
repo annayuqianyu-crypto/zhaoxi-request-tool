@@ -627,6 +627,68 @@ async def transcribe_audio(file: UploadFile = File(...)):
         return {"text": "", "error": f"识别失败：{err_msg[:200]}"}
 
 
+@app.post("/api/generate-demo")
+async def generate_demo(req: GenerateRequest):
+    """根据需求访谈内容生成可交互的HTML原型Demo"""
+    history_text = "\n".join(
+        f"{'用户' if m['role']=='user' else 'AI分析师'}: {m['content'][:300]}"
+        for m in req.history[-30:]
+    )
+    req_text = ""
+    if req.requirements:
+        items = req.requirements if isinstance(req.requirements[0], str) else [
+            f"- {r.get('feature','')}: {r.get('description','')}" for r in req.requirements
+        ]
+        req_text = "\n".join(items[:15])
+
+    prompt = f"""你是一位资深前端工程师，擅长快速制作高保真交互原型。
+
+【需求访谈记录】
+{history_text}
+
+【整理后的功能需求】
+{req_text if req_text else '（请从访谈记录中提取）'}
+
+请根据以上需求，生成一个完整的、可交互的HTML原型Demo，要求：
+
+1. **完全自包含**：单个HTML文件，内联CSS和JavaScript，不依赖任何外部CDN或资源
+2. **真实可用**：包含与需求匹配的模拟数据（3-8条示例记录），用户可以真实操作（点击、筛选、填写表单、查看详情等）
+3. **专业外观**：金融/企业级UI风格，配色深蓝+白，简洁专业；使用系统字体
+4. **核心流程完整**：覆盖需求中最关键的1-2个主流程，让用户能感受到产品的核心价值
+5. **导航清晰**：如有多个功能模块，用标签页或侧边栏组织，每个模块都可点击操作
+6. **数据互动**：支持增删改查中至少2种操作（如新增记录、筛选查询、查看详情、状态变更等）
+7. **朝曦场景**：数据内容贴合家族财富/税务/资本市场/法律/企业治理等专业场景
+
+注意：
+- 不要使用 alert()，改用页内提示
+- 表格数据要真实，字段名称要专业
+- 按钮点击要有反馈（高亮、状态变化、列表刷新等）
+- 顶部显示"⚡ 需求原型Demo — [系统名称]（仅供需求确认，非最终产品）"
+
+只输出完整的HTML代码，从<!DOCTYPE html>开始，不要有任何解释文字。"""
+
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "你是专业的前端原型工程师，直接输出完整HTML代码，不含任何Markdown标记或解释。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=4000,
+            temperature=0.4
+        )
+        html = resp.choices[0].message.content.strip()
+        # 清理可能的 markdown 代码块包裹
+        if html.startswith("```"):
+            html = html.split("```", 2)[1]
+            if html.startswith("html"):
+                html = html[4:]
+            html = html.rsplit("```", 1)[0].strip()
+        return {"html": html}
+    except Exception as e:
+        raise HTTPException(500, f"Demo生成失败：{str(e)}")
+
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
