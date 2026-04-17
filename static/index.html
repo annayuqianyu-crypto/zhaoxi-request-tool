@@ -374,22 +374,23 @@
     body.mobile-mode .mob-panel-handle { width:38px; height:4px; background:#cbd5e0; border-radius:2px; }
     body.mobile-mode .tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
     body.mobile-mode .req-subnav { overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
-    /* 手机端 Mermaid 图表自适应宽度修复 */
+    /* 手机端 Mermaid 图表：等比缩放，不破坏坐标系 */
     body.mobile-mode #wireframe-diagram-wrap,
     body.mobile-mode #req-flow-wrap {
       align-items: flex-start !important;
       justify-content: flex-start !important;
-      overflow-x: auto;
-      overflow-y: auto;
+      overflow: visible !important;
       padding: 10px !important;
+      display: block !important;
     }
-    body.mobile-mode #wireframe-diagram-wrap svg,
-    body.mobile-mode #req-flow-wrap svg {
-      width: 100% !important;
-      height: auto !important;
-      max-width: 100%;
-      min-width: unset !important;
-      transform: none !important;
+    body.mobile-mode .mobile-diagram-scaler {
+      display: block;
+      transform-origin: top left;
+      /* width/height set dynamically by JS */
+    }
+    body.mobile-mode .mobile-diagram-hint {
+      font-size: 11px; color: #a0aec0; text-align: center;
+      padding: 6px 0 2px; letter-spacing: .3px;
     }
 
     /* ── Update Animations ── */
@@ -1349,6 +1350,48 @@ async function renderDiagram(code) {
   await renderConvDiagram(code);
 }
 
+// 手机端：等比缩放 SVG 适应容器，不修改坐标系
+function fitMobileSvg(wrap, s) {
+  if (!s || !wrap) return;
+  // 读取 SVG 自然宽高（优先 viewBox，其次 width/height 属性）
+  let svgW = 0, svgH = 0;
+  const vb = s.getAttribute('viewBox');
+  if (vb) {
+    const parts = vb.trim().split(/[\s,]+/);
+    if (parts.length >= 4) { svgW = parseFloat(parts[2]); svgH = parseFloat(parts[3]); }
+  }
+  if (!svgW) svgW = parseFloat(s.getAttribute('width')) || s.getBoundingClientRect().width || 600;
+  if (!svgH) svgH = parseFloat(s.getAttribute('height')) || s.getBoundingClientRect().height || 400;
+
+  // 容器可用宽度
+  const containerW = wrap.parentElement ? wrap.parentElement.clientWidth - 24 : window.innerWidth - 24;
+  if (containerW <= 0 || svgW <= 0) return;
+
+  const scale = Math.min(1, containerW / svgW);
+  const scaledH = svgH * scale;
+
+  // 用 wrapper div 包裹，设置 transform，避免影响 SVG 内部坐标
+  const scaler = document.createElement('div');
+  scaler.className = 'mobile-diagram-scaler';
+  scaler.style.width = svgW + 'px';
+  scaler.style.height = svgH + 'px';
+  scaler.style.transform = `scale(${scale})`;
+  // wrap 高度匹配缩放后实际高度
+  wrap.style.height = (scaledH + 16) + 'px';
+  wrap.style.overflow = 'hidden';
+
+  s.parentNode.insertBefore(scaler, s);
+  scaler.appendChild(s);
+
+  // 如果图太宽（scale < 0.6），加提示
+  if (scale < 0.6) {
+    const hint = document.createElement('div');
+    hint.className = 'mobile-diagram-hint';
+    hint.textContent = '图表较复杂，建议在电脑端查看完整版';
+    wrap.appendChild(hint);
+  }
+}
+
 async function renderMermaidInto(wrapId, id, code, scale) {
   const wrap = document.getElementById(wrapId);
   if (!wrap) return;
@@ -1358,11 +1401,7 @@ async function renderMermaidInto(wrapId, id, code, scale) {
     const s = wrap.querySelector('svg');
     if (s) {
       if (document.body.classList.contains('mobile-mode')) {
-        // 手机端：撑满容器宽度，高度自适应
-        s.setAttribute('width', '100%');
-        s.style.width = '100%';
-        s.style.height = 'auto';
-        s.style.maxWidth = '100%';
+        fitMobileSvg(wrap, s);
       } else {
         s.style.transform = `scale(${scale})`;
         s.style.transformOrigin = 'top center';
@@ -1762,10 +1801,7 @@ async function renderWireframeDiagram(code) {
     const s = wrap.querySelector('svg');
     if (s) {
       if (document.body.classList.contains('mobile-mode')) {
-        s.setAttribute('width', '100%');
-        s.style.width = '100%';
-        s.style.height = 'auto';
-        s.style.maxWidth = '100%';
+        fitMobileSvg(wrap, s);
       } else {
         s.style.transform = `scale(${wireframeScale})`;
         s.style.transformOrigin = 'top center';
