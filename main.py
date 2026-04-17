@@ -2,10 +2,12 @@ import json
 import re
 import io
 import os
-import sqlite3
 import secrets
 from datetime import datetime
 from typing import List, Union, Optional
+
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Response, Header
 from fastapi.staticfiles import StaticFiles
@@ -23,27 +25,29 @@ client = OpenAI(
 )
 
 # ─────────────────────────────────────────────
-# 数据库初始化（SQLite）
+# 数据库初始化（PostgreSQL / Supabase）
 # ─────────────────────────────────────────────
-DB_PATH = os.environ.get("DB_PATH", "sessions.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
 
 def init_db():
     conn = get_db()
-    conn.executescript("""
+    cur = conn.cursor()
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
-        id       TEXT PRIMARY KEY,
-        email    TEXT UNIQUE NOT NULL,
-        name     TEXT NOT NULL,
-        token    TEXT UNIQUE NOT NULL,
-        is_admin INTEGER DEFAULT 0,
-        created_at TEXT NOT NULL,
+        id          TEXT PRIMARY KEY,
+        email       TEXT UNIQUE NOT NULL,
+        name        TEXT NOT NULL,
+        token       TEXT UNIQUE NOT NULL,
+        is_admin    INTEGER DEFAULT 0,
+        created_at  TEXT NOT NULL,
         last_active TEXT
-    );
+    )
+    """)
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS sessions (
         id           TEXT PRIMARY KEY,
         user_id      TEXT NOT NULL,
@@ -53,11 +57,11 @@ def init_db():
         mermaid      TEXT,
         completeness INTEGER DEFAULT 0,
         created_at   TEXT NOT NULL,
-        updated_at   TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    );
+        updated_at   TEXT NOT NULL
+    )
     """)
     conn.commit()
+    cur.close()
     conn.close()
 
 init_db()
@@ -68,8 +72,10 @@ def require_token(authorization: Optional[str] = Header(None)):
         raise HTTPException(401, "未登录，请先登录")
     token = authorization[7:]
     conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE token=?", (token,)).fetchone()
-    conn.close()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE token=%s", (token,))
+    user = cur.fetchone()
+    cur.close(); conn.close()
     if not user:
         raise HTTPException(401, "登录已失效，请重新登录")
     return dict(user)
@@ -780,24 +786,28 @@ async def login(req: LoginRequest):
     is_admin = 1 if email == admin_email else 0
 
     conn = get_db()
+    cur = conn.cursor()
     try:
-        user = conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        cur.execute("SELECT * FROM users WHERE email=%s", (email,))
+        user = cur.fetchone()
         now = datetime.now().isoformat()
         if user:
-            conn.execute("UPDATE users SET name=?, last_active=?, is_admin=? WHERE email=?",
-                         (name, now, max(is_admin, user["is_admin"]), email))
+            new_admin = max(is_admin, int(user["is_admin"]))
+            cur.execute("UPDATE users SET name=%s, last_active=%s, is_admin=%s WHERE email=%s",
+                        (name, now, new_admin, email))
             conn.commit()
             return {"token": user["token"], "user_id": user["id"],
-                    "name": name, "is_admin": bool(is_admin or user["is_admin"])}
+                    "user": {"name": name, "email": email, "is_admin": bool(new_admin)}}
         else:
             uid   = secrets.token_hex(8)
             token = secrets.token_hex(24)
-            conn.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)",
-                         (uid, email, name, token, is_admin, now, now))
+            cur.execute("INSERT INTO users VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                        (uid, email, name, token, is_admin, now, now))
             conn.commit()
-            return {"token": token, "user_id": uid, "name": name, "is_admin": bool(is_admin)}
+            return {"token": token, "user_id": uid,
+                    "user": {"name": name, "email": email, "is_admin": bool(is_admin)}}
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 @app.get("/api/auth/me")
 async def get_me(authorization: Optional[str] = Header(None)):
@@ -811,49 +821,50 @@ async def save_session(req: SaveSessionRequest, authorization: Optional[str] = H
     user = require_token(authorization)
     now  = datetime.now().isoformat()
     conn = get_db()
+    cur  = conn.cursor()
     try:
         sid = req.session_id or secrets.token_hex(10)
-        existing = conn.execute("SELECT id FROM sessions WHERE id=? AND user_id=?",
-                                (sid, user["id"])).fetchone()
-        data = (json.dumps(req.history, ensure_ascii=False),
-                json.dumps(req.requirements, ensure_ascii=False),
-                req.mermaid, req.completeness, req.title, now)
+        cur.execute("SELECT id FROM sessions WHERE id=%s AND user_id=%s", (sid, user["id"]))
+        existing = cur.fetchone()
+        h_json = json.dumps(req.history, ensure_ascii=False)
+        r_json = json.dumps(req.requirements, ensure_ascii=False)
         if existing:
-            conn.execute("""UPDATE sessions SET history=?,requirements=?,mermaid=?,
-                            completeness=?,title=?,updated_at=? WHERE id=?""",
-                         (*data, sid))
+            cur.execute("""UPDATE sessions SET history=%s,requirements=%s,mermaid=%s,
+                           completeness=%s,title=%s,updated_at=%s WHERE id=%s""",
+                        (h_json, r_json, req.mermaid, req.completeness, req.title, now, sid))
         else:
-            conn.execute("""INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?)""",
-                         (sid, user["id"], req.title,
-                          json.dumps(req.history, ensure_ascii=False),
-                          json.dumps(req.requirements, ensure_ascii=False),
-                          req.mermaid, req.completeness, now, now))
+            cur.execute("""INSERT INTO sessions VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (sid, user["id"], req.title, h_json, r_json,
+                         req.mermaid, req.completeness, now, now))
         conn.commit()
         return {"session_id": sid, "updated_at": now}
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 @app.get("/api/sessions")
 async def list_sessions(authorization: Optional[str] = Header(None)):
     """获取当前用户的所有会话列表（不含完整 history）"""
     user = require_token(authorization)
     conn = get_db()
+    cur  = conn.cursor()
     try:
-        rows = conn.execute("""SELECT id,title,completeness,created_at,updated_at
-                               FROM sessions WHERE user_id=? ORDER BY updated_at DESC""",
-                            (user["id"],)).fetchall()
-        return {"sessions": [dict(r) for r in rows]}
+        cur.execute("""SELECT id,title,completeness,created_at,updated_at
+                       FROM sessions WHERE user_id=%s ORDER BY updated_at DESC""",
+                    (user["id"],))
+        return {"sessions": [dict(r) for r in cur.fetchall()]}
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str, authorization: Optional[str] = Header(None)):
     """获取单条会话完整内容"""
     user = require_token(authorization)
     conn = get_db()
+    cur  = conn.cursor()
     try:
-        row = conn.execute("SELECT * FROM sessions WHERE id=? AND user_id=?",
-                           (session_id, user["id"])).fetchone()
+        cur.execute("SELECT * FROM sessions WHERE id=%s AND user_id=%s",
+                    (session_id, user["id"]))
+        row = cur.fetchone()
         if not row:
             raise HTTPException(404, "会话不存在")
         d = dict(row)
@@ -861,19 +872,20 @@ async def get_session(session_id: str, authorization: Optional[str] = Header(Non
         d["requirements"] = json.loads(d["requirements"] or "[]")
         return d
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str, authorization: Optional[str] = Header(None)):
     user = require_token(authorization)
     conn = get_db()
+    cur  = conn.cursor()
     try:
-        conn.execute("DELETE FROM sessions WHERE id=? AND user_id=?",
-                     (session_id, user["id"]))
+        cur.execute("DELETE FROM sessions WHERE id=%s AND user_id=%s",
+                    (session_id, user["id"]))
         conn.commit()
         return {"ok": True}
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 # ─────────────────────────────────────────────
 # 管理员看板
@@ -883,22 +895,24 @@ async def delete_session(session_id: str, authorization: Optional[str] = Header(
 async def admin_stats(authorization: Optional[str] = Header(None)):
     require_admin(authorization)
     conn = get_db()
+    cur  = conn.cursor()
     try:
-        users    = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-        active   = conn.execute(
-            "SELECT COUNT(DISTINCT user_id) FROM sessions WHERE updated_at > datetime('now','-7 days')"
-        ).fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM users"); users = cur.fetchone()["count"]
+        cur.execute("SELECT COUNT(*) FROM sessions"); sessions = cur.fetchone()["count"]
+        cur.execute("""SELECT COUNT(DISTINCT user_id) FROM sessions
+                       WHERE updated_at > (NOW() - INTERVAL '7 days')::text""")
+        active = cur.fetchone()["count"]
         return {"total_users": users, "total_sessions": sessions, "active_7d": active}
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 @app.get("/api/admin/users")
 async def admin_users(authorization: Optional[str] = Header(None)):
     require_admin(authorization)
     conn = get_db()
+    cur  = conn.cursor()
     try:
-        rows = conn.execute("""
+        cur.execute("""
             SELECT u.id, u.name, u.email, u.created_at, u.last_active,
                    COUNT(s.id) as session_count,
                    MAX(s.updated_at) as last_session,
@@ -907,29 +921,32 @@ async def admin_users(authorization: Optional[str] = Header(None)):
             LEFT JOIN sessions s ON s.user_id = u.id
             WHERE u.is_admin = 0
             GROUP BY u.id ORDER BY u.last_active DESC
-        """).fetchall()
-        return {"users": [dict(r) for r in rows]}
+        """)
+        return {"users": [dict(r) for r in cur.fetchall()]}
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 @app.get("/api/admin/users/{user_id}/sessions")
 async def admin_user_sessions(user_id: str, authorization: Optional[str] = Header(None)):
     require_admin(authorization)
     conn = get_db()
+    cur  = conn.cursor()
     try:
-        rows = conn.execute("""SELECT id,title,completeness,created_at,updated_at
-                               FROM sessions WHERE user_id=? ORDER BY updated_at DESC""",
-                            (user_id,)).fetchall()
-        return {"sessions": [dict(r) for r in rows]}
+        cur.execute("""SELECT id,title,completeness,created_at,updated_at
+                       FROM sessions WHERE user_id=%s ORDER BY updated_at DESC""",
+                    (user_id,))
+        return {"sessions": [dict(r) for r in cur.fetchall()]}
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 @app.get("/api/admin/sessions/{session_id}")
 async def admin_get_session(session_id: str, authorization: Optional[str] = Header(None)):
     require_admin(authorization)
     conn = get_db()
+    cur  = conn.cursor()
     try:
-        row = conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+        cur.execute("SELECT * FROM sessions WHERE id=%s", (session_id,))
+        row = cur.fetchone()
         if not row:
             raise HTTPException(404, "会话不存在")
         d = dict(row)
@@ -937,7 +954,7 @@ async def admin_get_session(session_id: str, authorization: Optional[str] = Head
         d["requirements"] = json.loads(d["requirements"] or "[]")
         return d
     finally:
-        conn.close()
+        cur.close(); conn.close()
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page():
