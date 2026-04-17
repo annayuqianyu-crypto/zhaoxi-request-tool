@@ -758,7 +758,7 @@ async def generate_demo(req: DemoRequest):
                 {"role": "system", "content": "你是专业的前端原型工程师，直接输出完整HTML代码，不含任何Markdown标记或解释。"},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=4000,
+            max_tokens=6000,
             temperature=0.4
         )
         html = resp.choices[0].message.content.strip()
@@ -768,9 +768,14 @@ async def generate_demo(req: DemoRequest):
             if html.startswith("html"):
                 html = html[4:]
             html = html.rsplit("```", 1)[0].strip()
+        # 校验是否包含有效 HTML
+        if "<html" not in html.lower() and "<!doctype" not in html.lower():
+            raise HTTPException(500, f"API返回内容不是有效HTML，可能被截断。原始内容前200字：{html[:200]}")
         return {"html": html}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, f"Demo生成失败：{str(e)}")
+        raise HTTPException(500, f"Demo生成失败：{type(e).__name__}: {str(e)[:300]}")
 
 
 # ─────────────────────────────────────────────

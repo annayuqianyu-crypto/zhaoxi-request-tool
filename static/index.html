@@ -32,7 +32,12 @@
     main { display:flex; flex:1; overflow:hidden; }
 
     /* ── Left: Chat ── */
-    #chat-panel { width:55%; display:flex; flex-direction:column; background:white; border-right:1px solid var(--border); }
+    #chat-panel { width:55%; min-width:280px; display:flex; flex-direction:column; background:white; }
+    /* ── 拖拽分隔条 ── */
+    #panel-divider { width:5px; flex-shrink:0; background:var(--border); cursor:col-resize; transition:background .15s; position:relative; z-index:10; }
+    #panel-divider:hover, #panel-divider.dragging { background:var(--blue); }
+    #panel-divider::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:3px; height:32px; border-left:1px solid #a0aec0; border-right:1px solid #a0aec0; border-radius:2px; opacity:.5; }
+    body.mobile-mode #panel-divider { display:none; }
     #chat-status { padding:10px 20px; border-bottom:1px solid var(--border); font-size:12px; color:#718096; display:flex; align-items:center; gap:6px; flex-shrink:0; }
     .stage-dot { width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0; transition:background .3s; }
     #messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
@@ -634,6 +639,9 @@
     </div>
   </div>
 
+  <!-- 拖拽分隔条 -->
+  <div id="panel-divider" title="拖拽调整左右宽度"></div>
+
   <!-- Right panel -->
   <div id="right-panel">
     <!-- Mobile: drag handle to close panel -->
@@ -896,7 +904,7 @@
           </div>
         </div>
         <div class="gen-content-wrap" style="padding:12px;">
-          <div id="wireframe-diagram-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;display:flex;align-items:center;justify-content:center;overflow:auto;">
+          <div id="wireframe-diagram-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;overflow:auto;">
             <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成包含多方案路径的功能流程设计图<br><span style="font-size:12px;color:#cbd5e0">类似 Visio 流程图风格，IT团队可直接用于开发</span></div>
           </div>
         </div>
@@ -1860,9 +1868,18 @@ async function renderWireframeDiagram(code) {
       if (document.body.classList.contains('mobile-mode')) {
         fitMobileSvg(wrap, s);
       } else {
+        // 自适应：先按容器宽度缩放显示全貌，用户可再手动缩放
+        const vb = s.getAttribute('viewBox');
+        let svgW = parseFloat(s.getAttribute('width')) || 800;
+        if (vb) { const p = vb.trim().split(/[\s,]+/); svgW = parseFloat(p[2]) || svgW; }
+        const containerW = wrap.clientWidth - 32;
+        wireframeScale = svgW > containerW ? Math.max(0.3, containerW / svgW) : 1;
+        s.style.transformOrigin = 'top left';
         s.style.transform = `scale(${wireframeScale})`;
-        s.style.transformOrigin = 'top center';
-        s.style.maxWidth = '100%';
+        s.style.display = 'block';
+        // 让容器高度能正确撑开
+        const svgH = parseFloat(s.getAttribute('height')) || (vb ? parseFloat(vb.trim().split(/[\s,]+/)[3]) : 400) || 400;
+        wrap.style.minHeight = Math.max(180, svgH * wireframeScale + 32) + 'px';
       }
     }
   } catch(e) {
@@ -1870,14 +1887,22 @@ async function renderWireframeDiagram(code) {
   }
 }
 function zoomWireframe(delta) {
-  wireframeScale = Math.max(0.3, Math.min(3, wireframeScale + delta));
+  wireframeScale = Math.max(0.2, Math.min(3, wireframeScale + delta));
   const s = document.querySelector('#wireframe-diagram-wrap svg');
-  if (s) { s.style.transform = `scale(${wireframeScale})`; s.style.transformOrigin = 'top center'; }
+  if (s) { s.style.transform = `scale(${wireframeScale})`; s.style.transformOrigin = 'top left'; }
 }
 function resetWireframeZoom() {
-  wireframeScale = 1;
-  const s = document.querySelector('#wireframe-diagram-wrap svg');
-  if (s) s.style.transform = 'scale(1)';
+  // 重置到适应宽度
+  const wrap = document.getElementById('wireframe-diagram-wrap');
+  const s = wrap ? wrap.querySelector('svg') : null;
+  if (!s) return;
+  const vb = s.getAttribute('viewBox');
+  let svgW = parseFloat(s.getAttribute('width')) || 800;
+  if (vb) { const p = vb.trim().split(/[\s,]+/); svgW = parseFloat(p[2]) || svgW; }
+  const containerW = wrap.clientWidth - 32;
+  wireframeScale = svgW > containerW ? Math.max(0.3, containerW / svgW) : 1;
+  s.style.transform = `scale(${wireframeScale})`;
+  s.style.transformOrigin = 'top left';
 }
 
 // ── 需求Demo 生成 ──
@@ -1897,7 +1922,11 @@ async function generateDemo() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
     });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    if (!resp.ok) {
+      let errMsg = 'HTTP ' + resp.status;
+      try { const e = await resp.json(); errMsg = e.detail || errMsg; } catch {}
+      throw new Error(errMsg);
+    }
     const data = await resp.json();
     if (!data.html) throw new Error('未返回HTML内容');
 
@@ -2690,6 +2719,44 @@ function renderDefinitionResult(d) {
     if (af) af.style.width = agentW + '%';
   }, 80);
 }
+
+// ══════════════════════════════════════════
+// ── 左右面板拖拽分隔条 ──
+// ══════════════════════════════════════════
+(function initDivider() {
+  const divider = document.getElementById('panel-divider');
+  const chatPanel = document.getElementById('chat-panel');
+  if (!divider || !chatPanel) return;
+  let dragging = false, startX = 0, startW = 0;
+
+  divider.addEventListener('mousedown', function(e) {
+    if (document.body.classList.contains('mobile-mode')) return;
+    dragging = true;
+    startX = e.clientX;
+    startW = chatPanel.offsetWidth;
+    divider.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    const mainW = chatPanel.parentElement.offsetWidth;
+    const delta = e.clientX - startX;
+    const newW = Math.max(280, Math.min(mainW - 280, startW + delta));
+    chatPanel.style.width = newW + 'px';
+    chatPanel.style.flex = 'none';
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
 
 // ══════════════════════════════════════════
 // ── 设备选择 & 手机端 (Device & Mobile) ──
