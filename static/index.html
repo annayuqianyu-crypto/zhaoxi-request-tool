@@ -601,7 +601,7 @@
       <button class="tab-btn" onclick="switchTab('requirements',this)" id="tab-req-btn">
         需求清单<span class="req-badge" id="req-count">0</span>
       </button>
-      <button class="tab-btn" onclick="switchTab('definition',this)" id="tab-def-btn">💡 功能定义</button>
+      <button class="tab-btn" onclick="switchTab('definition',this)" id="tab-def-btn">功能定义</button>
     </div>
 
     <!-- Tab 1: Methodology -->
@@ -2431,24 +2431,27 @@ function renderDefinitionResult(d) {
 // ── 设备选择 & 手机端 (Device & Mobile) ──
 // ══════════════════════════════════════════
 
-// 初始化：读取已存储的设备偏好
+// 初始化：每次刷新/重新打开都显示首页选择
+// 用 sessionStorage 区分：同一标签页内选过就不重复弹，新开/刷新则必弹
 (function initDevice() {
-  const pref = localStorage.getItem('zhaoxi_device');
+  const pref = sessionStorage.getItem('zhaoxi_device_session');
   if (pref) {
+    // 本次会话已选过，直接沿用
     document.getElementById('device-splash').style.display = 'none';
     if (pref === 'mobile') document.body.classList.add('mobile-mode');
   }
+  // 否则保持 splash 显示，等用户点击选择
 })();
 
 function selectDevice(type) {
-  localStorage.setItem('zhaoxi_device', type);
+  sessionStorage.setItem('zhaoxi_device_session', type);
   document.getElementById('device-splash').style.display = 'none';
   if (type === 'mobile') document.body.classList.add('mobile-mode');
   else document.body.classList.remove('mobile-mode');
 }
 
 function switchDevice() {
-  localStorage.removeItem('zhaoxi_device');
+  sessionStorage.removeItem('zhaoxi_device_session');
   location.reload();
 }
 
