@@ -1869,51 +1869,85 @@ function clearAttachChip() { const el=document.getElementById('current-chip'); i
 function clearAttachment() { attachedFile=null; clearAttachChip(); }
 
 // ── Voice Input ──
-function toggleVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { alert('您的浏览器不支持语音输入，请使用 Chrome 或 Edge'); return; }
+// ── 语音录音 + Whisper 转文字 ──
+let mediaRecorder = null;
+let audioChunks = [];
 
+async function toggleVoice() {
+  const btn = document.getElementById('voice-btn');
+
+  // 正在录音 → 停止
   if (isRecording) {
-    recognition.stop();
+    mediaRecorder && mediaRecorder.stop();
     return;
   }
 
-  const ta = document.getElementById('user-input');
-  speechBaseText = ta.value;
-  speechBuffer = '';
+  // 请求麦克风权限
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e) {
+    alert('无法获取麦克风权限，请在浏览器设置中允许使用麦克风');
+    return;
+  }
 
-  recognition = new SR();
-  recognition.lang = 'zh-CN';
-  recognition.continuous = true;
-  recognition.interimResults = true;
+  // 选择支持的格式
+  const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg','audio/mp4']
+    .find(t => MediaRecorder.isTypeSupported(t)) || '';
 
-  recognition.onresult = (event) => {
-    let final = '', interim = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) final += event.results[i][0].transcript;
-      else interim += event.results[i][0].transcript;
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+
+  mediaRecorder.onstop = async () => {
+    // 停止所有音轨
+    stream.getTracks().forEach(t => t.stop());
+    isRecording = false;
+    btn.classList.remove('recording');
+    btn.title = '语音输入';
+
+    if (audioChunks.length === 0) return;
+
+    // 显示转写中状态
+    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+    btn.disabled = true;
+    showToast('🎙️ 正在识别语音…');
+
+    try {
+      const blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+      const ext = (mimeType || 'audio/webm').includes('mp4') ? 'mp4' : (mimeType||'').includes('ogg') ? 'ogg' : 'webm';
+      const formData = new FormData();
+      formData.append('file', blob, `recording.${ext}`);
+
+      const resp = await fetch('/api/transcribe', { method: 'POST', body: formData });
+      const data = await resp.json();
+
+      if (data.text) {
+        const ta = document.getElementById('user-input');
+        const sep = ta.value.trim() ? '\n' : '';
+        ta.value = ta.value.trim() + sep + data.text;
+        autoResize(ta);
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = ta.value.length;
+        showToast('✅ 语音识别完成');
+      } else {
+        showToast('⚠️ 未能识别，请重试');
+      }
+    } catch(e) {
+      showToast('❌ 识别失败：' + e.message);
+    } finally {
+      // 恢复按钮
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
+      btn.disabled = false;
+      btn.title = '语音输入';
     }
-    speechBuffer += final;
-    ta.value = speechBaseText + (speechBaseText && speechBuffer ? '\n' : '') + speechBuffer + interim;
-    autoResize(ta);
   };
 
-  recognition.onend = () => {
-    isRecording = false;
-    document.getElementById('voice-btn').classList.remove('recording');
-    ta.value = speechBaseText + (speechBaseText && speechBuffer ? '\n' : '') + speechBuffer;
-    autoResize(ta);
-  };
-
-  recognition.onerror = (e) => {
-    if (e.error !== 'aborted') alert('语音识别错误：' + e.error);
-    isRecording = false;
-    document.getElementById('voice-btn').classList.remove('recording');
-  };
-
-  recognition.start();
+  mediaRecorder.start();
   isRecording = true;
-  document.getElementById('voice-btn').classList.add('recording');
+  btn.classList.add('recording');
+  btn.title = '点击停止录音';
+  showToast('🎙️ 录音中…点击话筒停止');
 }
 
 // ── Export ──
@@ -2506,24 +2540,41 @@ function updateQuickChips(stage) {
     const cols = cfg.categories.map(cat =>
       `<div class="chips-cat-col">
         <div class="chips-cat-title">${cat.title}</div>
-        ${cat.chips.map(c => `<button class="chip-btn-sm" onclick="useChip(this,${JSON.stringify(c.template||c)})">${c.label||c}</button>`).join('')}
+        ${cat.chips.map(c => {
+          const label = c.label||c;
+          const tmpl = (c.template||c).replace(/"/g,'&quot;');
+          return `<button class="chip-btn-sm" data-tmpl="${tmpl}" onclick="useChipEl(this)">${label}</button>`;
+        }).join('')}
       </div>`
     ).join('');
     container.innerHTML = `<span class="chips-label">${cfg.label}</span><div class="chips-category-grid">${cols}</div>`;
   } else {
     container.innerHTML = `<span class="chips-label">${cfg.label}</span>` +
-      cfg.chips.map(c => `<button class="chip-btn" onclick="useChip(this,${JSON.stringify(c.template||c)})">${c.label||c}</button>`).join('');
+      cfg.chips.map(c => {
+        const label = c.label||c;
+        const tmpl = (c.template||c).replace(/"/g,'&quot;');
+        return `<button class="chip-btn" data-tmpl="${tmpl}" onclick="useChipEl(this)">${label}</button>`;
+      }).join('');
   }
 }
 
-function useChip(btn, text) {
+function useChipEl(btn) {
+  const text = btn.getAttribute('data-tmpl');
   const ta = document.getElementById('user-input');
   ta.value = text;
   autoResize(ta);
   ta.focus();
-  // 光标移到末尾，方便用户继续编辑
   ta.selectionStart = ta.selectionEnd = ta.value.length;
-  // 轻微动效反馈
+  btn.style.background = 'var(--blue-light)';
+  setTimeout(() => btn.style.background = '', 300);
+}
+
+function useChip(btn, text) { // 兼容旧调用
+  const ta = document.getElementById('user-input');
+  ta.value = text;
+  autoResize(ta);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = ta.value.length;
   btn.style.background = 'var(--blue-light)';
   setTimeout(() => btn.style.background = '', 300);
 }
@@ -2536,17 +2587,31 @@ function initDesktopOpener() {
   grid.innerHTML = cats.map(cat =>
     `<div class="dop-cat-col">
       <div class="dop-cat-title">${cat.title}</div>
-      ${cat.chips.map(c => `<button class="dop-chip" onclick="useDopChip(${JSON.stringify(c.template||c)})">${c.label||c}</button>`).join('')}
+      ${cat.chips.map((c, i) => {
+        const label = c.label || c;
+        const tmpl = c.template || c;
+        // 用 data 属性避免 onclick 里双引号冲突
+        return `<button class="dop-chip" data-tmpl="${tmpl.replace(/"/g,'&quot;')}" onclick="useDopChipEl(this)">${label}</button>`;
+      }).join('')}
     </div>`
   ).join('');
 }
 
-function useDopChip(text) {
+function useDopChipEl(btn) {
+  const text = btn.getAttribute('data-tmpl');
   const ta = document.getElementById('user-input');
   ta.value = text;
   autoResize(ta);
   ta.focus();
-  // 光标移到末尾，引导用户在模板基础上补充修改后再发送
+  ta.selectionStart = ta.selectionEnd = ta.value.length;
+  hideDesktopOpener();
+}
+
+function useDopChip(text) { // 兼容旧调用
+  const ta = document.getElementById('user-input');
+  ta.value = text;
+  autoResize(ta);
+  ta.focus();
   ta.selectionStart = ta.selectionEnd = ta.value.length;
   hideDesktopOpener();
 }

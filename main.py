@@ -598,6 +598,23 @@ async def export_word(req: WordExportReq):
     )
 
 
+@app.post("/api/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """接收录音文件，调用 Whisper 转文字"""
+    try:
+        audio_bytes = await file.read()
+        fname = file.filename or "audio.webm"
+        # OpenAI Whisper transcription
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=(fname, audio_bytes, file.content_type or "audio/webm"),
+            language="zh"
+        )
+        return {"text": transcript.text}
+    except Exception as e:
+        raise HTTPException(500, f"语音识别失败：{str(e)}")
+
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
