@@ -32,11 +32,41 @@
     main { display:flex; flex:1; overflow:hidden; }
 
     /* ── Left: Chat ── */
-    #chat-panel { width:55%; min-width:280px; display:flex; flex-direction:column; background:white; }
+    #chat-panel { width:55%; min-width:280px; display:flex; flex-direction:column; background:white; border-right:1px solid #c8d3e0; }
     /* ── 拖拽分隔条 ── */
-    #panel-divider { width:5px; flex-shrink:0; background:var(--border); cursor:col-resize; transition:background .15s; position:relative; z-index:10; }
-    #panel-divider:hover, #panel-divider.dragging { background:var(--blue); }
-    #panel-divider::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:3px; height:32px; border-left:1px solid #a0aec0; border-right:1px solid #a0aec0; border-radius:2px; opacity:.5; }
+    #panel-divider {
+      width: 12px;
+      flex-shrink: 0;
+      background: #dde3ec;
+      cursor: col-resize;
+      transition: background .15s;
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #panel-divider:hover, #panel-divider.dragging {
+      background: #b8c7dc;
+    }
+    /* 中间三个竖点grip */
+    #panel-divider::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 4px;
+      height: 36px;
+      background: radial-gradient(circle, #8fa3be 1.5px, transparent 1.5px) 0 0 / 4px 10px repeat-y;
+      border-radius: 2px;
+      opacity: .7;
+      pointer-events: none;
+    }
+    #panel-divider:hover::before, #panel-divider.dragging::before {
+      opacity: 1;
+      background: radial-gradient(circle, #2b6cb0 1.5px, transparent 1.5px) 0 0 / 4px 10px repeat-y;
+    }
     body.mobile-mode #panel-divider { display:none; }
     #chat-status { padding:10px 20px; border-bottom:1px solid var(--border); font-size:12px; color:#718096; display:flex; align-items:center; gap:6px; flex-shrink:0; }
     .stage-dot { width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0; transition:background .3s; }
@@ -855,7 +885,6 @@
         <button class="req-subbtn" onclick="switchReqSub('wireframe',this)">📐 线框图</button>
         <button class="req-subbtn" onclick="switchReqSub('preview',this)">🖥️ 页面展示</button>
         <button class="req-subbtn" onclick="switchReqSub('prd',this)">📄 PRD文档</button>
-        <button class="req-subbtn" onclick="switchReqSub('demo',this)" id="demo-tab-btn">🚀 需求Demo</button>
       </div>
 
       <!-- 📝 需求梳理 -->
@@ -971,41 +1000,6 @@
         </div>
       </div>
 
-      <!-- 🚀 需求Demo -->
-      <div id="req-sub-demo" class="req-sub">
-        <div class="gen-header">
-          <div class="gen-header-left">
-            <span class="gen-icon">🚀</span>
-            <div>
-              <div class="gen-title">需求原型Demo</div>
-              <div class="gen-subtitle">AI根据访谈内容生成可交互原型，让您直观感受产品是否符合预期</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <button class="exp-btn" id="demo-open-btn" onclick="openDemoNewTab()" style="display:none;" title="在新标签页全屏体验">↗ 全屏</button>
-            <button class="exp-btn" id="demo-dl-btn" onclick="downloadDemo()" style="display:none;" title="下载HTML文件">📥 下载</button>
-            <button class="gen-btn" id="gen-demo-btn" onclick="generateDemo()">⚡ 生成Demo</button>
-          </div>
-        </div>
-        <div class="gen-content-wrap" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
-          <div id="demo-empty-tip" style="text-align:center;padding:32px 10px;">
-            <div style="font-size:36px;margin-bottom:12px;">🎮</div>
-            <p style="font-size:13px;color:#718096;margin:0 0 8px;line-height:1.8;">完成需求访谈后，点击「⚡ 生成Demo」<br>AI将根据您的需求描述生成一个可操作的原型</p>
-            <p style="font-size:11px;color:#a0aec0;margin:0;">原型包含模拟数据和核心交互，用于确认需求方向是否正确<br>不是最终产品，仅供需求验证使用</p>
-          </div>
-          <div id="demo-result-wrap" style="display:none;flex-direction:column;gap:8px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px;">
-              <span style="font-size:12px;color:#48bb78;font-weight:600;">✅ Demo已生成，可在下方交互体验</span>
-              <button onclick="generateDemo()" style="font-size:11px;color:#718096;background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;cursor:pointer;">重新生成</button>
-            </div>
-            <iframe id="demo-iframe"
-              style="width:100%;height:560px;border:1.5px solid var(--border);border-radius:10px;background:white;"
-              sandbox="allow-scripts allow-forms allow-same-origin"
-              title="需求原型Demo">
-            </iframe>
-          </div>
-        </div>
-      </div>
 
     </div>
     <!-- Tab 4: Function Definition -->
@@ -1152,6 +1146,52 @@ let userInfo = (function() {
   try { return JSON.parse(localStorage.getItem('zhaoxi_user') || 'null'); } catch { return null; }
 })();
 
+// ── Grill-Me 快捷回复卡片（必须在最顶部声明，避免 TDZ 报错）──
+const GRILL_CHIPS = {
+  opening: {
+    label: '选择您的业务场景快速开始：',
+    categories: [
+      { title: '数据类', chips: [
+        { label: '客户KYC数据管理', template: '我们目前用Excel管理客户KYC信息，数据分散、更新不及时，希望做一个统一的客户档案平台，支持信息录入、合规审核和定期复核提醒。' },
+        { label: '股东持仓台账',    template: '公司股东结构比较复杂，持仓和变动记录靠人工维护，想建一个台账系统来追踪每位股东的持股比例、历史变动和相关文件。' },
+        { label: '家族信托数据归集', template: '我们管理多个家族信托架构，资产散落在不同账户和机构，想把所有数据归集到一个平台，实现统一查看和定期对账。' }
+      ]},
+      { title: '流程类', chips: [
+        { label: '合同多级审批流', template: '公司合同审批需要经过多个部门层级，目前靠邮件传递容易出错、进度不透明，想做一套线上多级审批系统，能追踪每个环节的状态。' },
+        { label: '客户准入审核',   template: '新客户入职需要完成背景调查、合规审查等多个步骤，目前流程不统一，想把整个准入流程标准化、线上化，并留存完整的审核记录。' },
+        { label: '跨部门协作工单', template: '各部门之间的协作任务目前没有统一管理，经常遗漏或责任不清，想做一个工单系统来创建任务、指派负责人、跟踪进度和催办。' }
+      ]},
+      { title: '合同类', chips: [
+        { label: '合同起草与审批', template: '我们每月要起草大量合同，希望有模板库可以快速套用，同时支持在线批注、多方审批和电子签署，全流程留痕。' },
+        { label: '合同到期提醒',   template: '公司有很多长期合同，经常忘记到期日或续签节点，希望系统能在关键时间节点前自动提醒对应负责人，避免遗漏。' },
+        { label: '合同变更管理',   template: '合同执行过程中经常发生变更，想记录每次变更的内容、原因和审批记录，形成完整的合同生命周期档案，便于后续审计查阅。' }
+      ]},
+      { title: '报告类', chips: [
+        { label: 'ESG合规报告',  template: '公司需要定期出具ESG报告，目前数据收集分散、整理耗时，希望能自动汇总各部门数据，按监管或披露标准生成结构化报告。' },
+        { label: '税务申报汇总', template: '我们有多个主体需要定期申报税务，数据整理很繁琐，想做一个系统来归集各主体的涉税数据，自动生成申报所需的汇总表格。' },
+        { label: '监管定期报送', template: '我们需要定期向监管机构报送指定格式的数据，目前手工整理耗时且容易出错，希望系统能自动拉取数据并生成符合要求的报送文件。' }
+      ]},
+      { title: '方案类', chips: [
+        { label: '股东减持方案', template: '公司近期有股东计划减持，需要结合税务筹划、锁定期和合规要求制定减持方案，希望有一个系统来管理方案版本、审批和执行进度。' },
+        { label: '家族财富规划', template: '我们需要为高净值客户制定个性化的财富传承方案，涉及信托、保险、境外架构等多种工具，希望有个平台来管理方案、更新和客户沟通记录。' },
+        { label: '境外投资合规', template: '公司在多个境外地区有投资布局，各司法管辖区合规要求不同，希望建一个合规管理平台来追踪各地要求、申报节点和风险预警。' }
+      ]}
+    ]
+  },
+  exploring: {
+    label: '常见补充描述：',
+    chips: ['目前用Excel手动处理','需要多级审批流','数据要跨部门共享','涉及境外合规要求','需要自动生成报告','希望移动端可用']
+  },
+  drilling: {
+    label: '追问回应：',
+    chips: ['理解正确，继续','补充一个特殊情况','审批层级再说明下','还有其他使用角色','这个数据来自CRM','有时限要求']
+  },
+  summarizing: {
+    label: '确认与调整：',
+    chips: ['需求描述准确','需要微调某一项','可以开始整理文档','再补充一个场景','优先级需要排序']
+  }
+};
+
 // Voice
 let recognition = null;
 let isRecording = false;
@@ -1180,13 +1220,18 @@ mermaid.initialize({
   flowchart: { curve: 'basis', padding: 20, useMaxWidth: true }
 });
 
-window.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const data = await fetch('/api/init').then(r => r.json());
-    applyAIResponse(data, false);
-  } catch(e) {
-    addMessage('ai', '⚠️ 服务连接失败，请检查后端是否启动。\n' + e.message);
-  }
+// 本地开场白（与后端 OPENING_MESSAGE 保持一致，无需网络即可立刻初始化）
+const LOCAL_OPENING = {
+  message: '您好！我是朝曦的业务需求分析助手，熟悉家族财富架构、全球税务规划、资本市场服务、法律咨询和企业治理五大业务体系。\n\n**我的工作方式：** 通过深度访谈把模糊想法变成清晰的IT需求，右侧实时生成业务流程图，需求清单分四个板块展示：需求梳理、线框图、流程图、PRD文档，最终可直接交付IT团队。\n\n**请按以下框架描述您的场景**（能说多少说多少，其余我来追问）：\n\n🏢 **所在部门**：哪个业务条线或岗位会使用这个系统？\n　　（如：税务团队 / 架构师团队 / 资本市场组 / 客服中台）\n😣 **业务痛点**：目前这件事最大的困难或效率瓶颈是什么？\n🎯 **期望解决**：您希望系统能帮您做到什么，达到什么效果？\n📥 **涉及输入**：需要录入或上传哪些信息？数据从哪里来？\n📤 **期望输出**：系统最终要产出什么？发给谁？存在哪里？\n\n您也可以直接上传相关文件（Word/Excel/PPT）或使用 🎤 语音描述，我会帮您提炼需求。',
+  mermaid: 'graph TD\n    classDef startEnd fill:#1a365d,stroke:#1a365d,color:#fff\n    classDef process fill:#ebf4ff,stroke:#2b6cb0,color:#1a365d\n    classDef output fill:#f0fff4,stroke:#38a169,color:#276749\n\n    A([🚀 开始访谈]):::startEnd --> B[描述真实业务场景]:::process\n    B --> C[AI深度追问澄清]:::process\n    C --> D[实时生成流程图]:::process\n    D --> E[积累需求清单]:::process\n    E --> F([导出需求文档]):::startEnd',
+  requirements: [],
+  stage: 'opening',
+  completeness: 0
+};
+
+window.addEventListener('DOMContentLoaded', () => {
+  // 直接用本地开场白初始化，无需网络，刷新/首次加载均稳定
+  applyAIResponse(LOCAL_OPENING, false);
 });
 
 // ── Send message ──
@@ -2719,10 +2764,12 @@ function renderDefinitionResult(d) {
 // ══════════════════════════════════════════
 // ── 左右面板拖拽分隔条 ──
 // ══════════════════════════════════════════
-(function initDivider() {
+function initDivider() {
   const divider = document.getElementById('panel-divider');
   const chatPanel = document.getElementById('chat-panel');
-  if (!divider || !chatPanel) return;
+  const mainEl = document.querySelector('main');
+  if (!divider || !chatPanel || !mainEl) return;
+
   let dragging = false, startX = 0, startW = 0;
 
   divider.addEventListener('mousedown', function(e) {
@@ -2738,9 +2785,9 @@ function renderDefinitionResult(d) {
 
   document.addEventListener('mousemove', function(e) {
     if (!dragging) return;
-    const mainW = chatPanel.parentElement.offsetWidth;
+    const mainW = mainEl.offsetWidth;
     const delta = e.clientX - startX;
-    const newW = Math.max(280, Math.min(mainW - 280, startW + delta));
+    const newW = Math.max(280, Math.min(mainW - 320, startW + delta));
     chatPanel.style.width = newW + 'px';
     chatPanel.style.flex = 'none';
   });
@@ -2752,7 +2799,36 @@ function renderDefinitionResult(d) {
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   });
-})();
+
+  // 触摸屏支持
+  divider.addEventListener('touchstart', function(e) {
+    if (document.body.classList.contains('mobile-mode')) return;
+    const t = e.touches[0];
+    dragging = true;
+    startX = t.clientX;
+    startW = chatPanel.offsetWidth;
+    divider.classList.add('dragging');
+    e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!dragging) return;
+    const t = e.touches[0];
+    const mainW = mainEl.offsetWidth;
+    const delta = t.clientX - startX;
+    const newW = Math.max(280, Math.min(mainW - 320, startW + delta));
+    chatPanel.style.width = newW + 'px';
+    chatPanel.style.flex = 'none';
+  });
+
+  document.addEventListener('touchend', function() {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove('dragging');
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initDivider);
 
 // ══════════════════════════════════════════
 // ── 设备选择 & 手机端 (Device & Mobile) ──
@@ -2834,52 +2910,7 @@ function updateMobileReqBadge(count) {
   else badge.classList.remove('show');
 }
 
-// ── Grill-Me 快捷回复卡片（手机端专属）──
-// 对应访谈各阶段的朝曦业务场景快捷回复
-const GRILL_CHIPS = {
-  opening: {
-    label: '选择您的业务场景快速开始：',
-    categories: [
-      { title: '数据类', chips: [
-        { label: '客户KYC数据管理', template: '我们目前用Excel管理客户KYC信息，数据分散、更新不及时，希望做一个统一的客户档案平台，支持信息录入、合规审核和定期复核提醒。' },
-        { label: '股东持仓台账',    template: '公司股东结构比较复杂，持仓和变动记录靠人工维护，想建一个台账系统来追踪每位股东的持股比例、历史变动和相关文件。' },
-        { label: '家族信托数据归集', template: '我们管理多个家族信托架构，资产散落在不同账户和机构，想把所有数据归集到一个平台，实现统一查看和定期对账。' }
-      ]},
-      { title: '流程类', chips: [
-        { label: '合同多级审批流', template: '公司合同审批需要经过多个部门层级，目前靠邮件传递容易出错、进度不透明，想做一套线上多级审批系统，能追踪每个环节的状态。' },
-        { label: '客户准入审核',   template: '新客户入职需要完成背景调查、合规审查等多个步骤，目前流程不统一，想把整个准入流程标准化、线上化，并留存完整的审核记录。' },
-        { label: '跨部门协作工单', template: '各部门之间的协作任务目前没有统一管理，经常遗漏或责任不清，想做一个工单系统来创建任务、指派负责人、跟踪进度和催办。' }
-      ]},
-      { title: '合同类', chips: [
-        { label: '合同起草与审批', template: '我们每月要起草大量合同，希望有模板库可以快速套用，同时支持在线批注、多方审批和电子签署，全流程留痕。' },
-        { label: '合同到期提醒',   template: '公司有很多长期合同，经常忘记到期日或续签节点，希望系统能在关键时间节点前自动提醒对应负责人，避免遗漏。' },
-        { label: '合同变更管理',   template: '合同执行过程中经常发生变更，想记录每次变更的内容、原因和审批记录，形成完整的合同生命周期档案，便于后续审计查阅。' }
-      ]},
-      { title: '报告类', chips: [
-        { label: 'ESG合规报告',  template: '公司需要定期出具ESG报告，目前数据收集分散、整理耗时，希望能自动汇总各部门数据，按监管或披露标准生成结构化报告。' },
-        { label: '税务申报汇总', template: '我们有多个主体需要定期申报税务，数据整理很繁琐，想做一个系统来归集各主体的涉税数据，自动生成申报所需的汇总表格。' },
-        { label: '监管定期报送', template: '我们需要定期向监管机构报送指定格式的数据，目前手工整理耗时且容易出错，希望系统能自动拉取数据并生成符合要求的报送文件。' }
-      ]},
-      { title: '方案类', chips: [
-        { label: '股东减持方案', template: '公司近期有股东计划减持，需要结合税务筹划、锁定期和合规要求制定减持方案，希望有一个系统来管理方案版本、审批和执行进度。' },
-        { label: '家族财富规划', template: '我们需要为高净值客户制定个性化的财富传承方案，涉及信托、保险、境外架构等多种工具，希望有个平台来管理方案、更新和客户沟通记录。' },
-        { label: '境外投资合规', template: '公司在多个境外地区有投资布局，各司法管辖区合规要求不同，希望建一个合规管理平台来追踪各地要求、申报节点和风险预警。' }
-      ]}
-    ]
-  },
-  exploring: {
-    label: '常见补充描述：',
-    chips: ['目前用Excel手动处理','需要多级审批流','数据要跨部门共享','涉及境外合规要求','需要自动生成报告','希望移动端可用']
-  },
-  drilling: {
-    label: '追问回应：',
-    chips: ['理解正确，继续','补充一个特殊情况','审批层级再说明下','还有其他使用角色','这个数据来自CRM','有时限要求']
-  },
-  summarizing: {
-    label: '确认与调整：',
-    chips: ['需求描述准确','需要微调某一项','可以开始整理文档','再补充一个场景','优先级需要排序']
-  }
-};
+// GRILL_CHIPS 已移至脚本顶部 App State 区域声明（避免 TDZ 报错）
 
 function updateQuickChips(stage) {
   const container = document.getElementById('quick-chips');

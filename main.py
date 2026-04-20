@@ -3,11 +3,10 @@ import re
 import io
 import os
 import secrets
-from datetime import datetime
+import urllib.request
+import urllib.parse
+from datetime import datetime, timedelta
 from typing import List, Union, Optional
-
-import psycopg2
-from psycopg2.extras import RealDictCursor
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Response, Header
 from fastapi.staticfiles import StaticFiles
@@ -25,66 +24,103 @@ client = OpenAI(
 )
 
 # ─────────────────────────────────────────────
-# 数据库初始化（PostgreSQL / Supabase）
+# Supabase REST API（走 HTTPS，自动通过系统代理）
+# 彻底替代 psycopg2 直连，解决 TCP/5432 被代理拦截问题
 # ─────────────────────────────────────────────
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://nbjdukzpjblpavnmmwmm.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-def get_db():
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-    return conn
+
+def _sb(method: str, path: str, *, data=None, params: dict = None, extra_headers: dict = None):
+    """
+    Supabase PostgREST REST 调用。
+    urllib.request 自动读取 HTTPS_PROXY 环境变量，无需额外配置。
+    """
+    url = SUPABASE_URL + path
+    if params:
+        parts = [
+            f"{urllib.parse.quote(str(k))}="
+            f"{urllib.parse.quote(str(v), safe='.,*-_:/()!')}"
+            for k, v in params.items()
+        ]
+        url += "?" + "&".join(parts)
+
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+
+    body = json.dumps(data, ensure_ascii=False).encode("utf-8") if data is not None else None
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as e:
+        err = e.read().decode(errors="replace")
+        raise HTTPException(e.code, f"数据库错误: {err[:300]}")
+    except urllib.error.URLError as e:
+        raise HTTPException(503, f"数据库连接失败: {e.reason}")
+
+
+def _sb_count(path: str, params: dict = None) -> int:
+    """返回符合条件的行数（select=id 然后在 Python 侧计数）。"""
+    try:
+        rows = _sb("GET", path, params={**(params or {}), "select": "id"})
+        return len(rows) if isinstance(rows, list) else 0
+    except Exception:
+        return 0
+
 
 def init_db():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id          TEXT PRIMARY KEY,
-        email       TEXT UNIQUE NOT NULL,
-        name        TEXT NOT NULL,
-        token       TEXT UNIQUE NOT NULL,
-        is_admin    INTEGER DEFAULT 0,
-        created_at  TEXT NOT NULL,
-        last_active TEXT
-    )
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS sessions (
-        id           TEXT PRIMARY KEY,
-        user_id      TEXT NOT NULL,
-        title        TEXT,
-        history      TEXT,
-        requirements TEXT,
-        mermaid      TEXT,
-        completeness INTEGER DEFAULT 0,
-        created_at   TEXT NOT NULL,
-        updated_at   TEXT NOT NULL
-    )
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
+    """
+    验证 Supabase 表已存在并可访问。
+    若表不存在，请在 Supabase 控制台 SQL Editor 中执行：
+      CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL, token TEXT UNIQUE NOT NULL,
+          is_admin INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL, last_active TEXT);
+      CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+          title TEXT, history TEXT, requirements TEXT, mermaid TEXT,
+          completeness INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    """
+    _sb("GET", "/rest/v1/users",    params={"select": "id", "limit": "1"})
+    _sb("GET", "/rest/v1/sessions", params={"select": "id", "limit": "1"})
 
-init_db()
+
+try:
+    init_db()
+    print("[OK] Supabase REST API connected and tables verified.")
+except Exception as _e:
+    print(f"[WARN] Supabase check: {_e}")
+    print("[INFO] If tables are missing, run the CREATE TABLE SQL in Supabase dashboard.")
+
 
 def require_token(authorization: Optional[str] = Header(None)):
     """从 Authorization: Bearer <token> 中验证用户"""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "未登录，请先登录")
     token = authorization[7:]
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE token=%s", (token,))
-    user = cur.fetchone()
-    cur.close(); conn.close()
-    if not user:
+    rows = _sb("GET", "/rest/v1/users", params={"token": f"eq.{token}", "select": "*"})
+    if not rows or not isinstance(rows, list):
         raise HTTPException(401, "登录已失效，请重新登录")
-    return dict(user)
+    return rows[0]
+
 
 def require_admin(authorization: Optional[str] = Header(None)):
     user = require_token(authorization)
-    if not user["is_admin"]:
+    if not user.get("is_admin"):
         raise HTTPException(403, "无管理员权限")
     return user
+
 
 # ─────────────────────────────────────────────
 # System prompt：Grill-Me 风格 + 结构化需求输出
@@ -450,7 +486,6 @@ async def generate_section(req: GenerateRequest):
         return {"type": "flowchart", "mermaid": cleaned, "requirements": []}
 
     elif req.type == "wireframe":
-        # 生成功能流程设计图（Mermaid），侧重系统交互路径与分支方案
         prompt = f"""根据以下访谈记录，生成一份 IT 人员使用的功能流程设计图（Mermaid 格式）。
 
 访谈记录：
@@ -603,13 +638,11 @@ async def export_word(req: WordExportReq):
 
     doc = Document()
 
-    # 设置文档默认字体
     style = doc.styles['Normal']
     style.font.name = '微软雅黑'
     style.font.size = Pt(11)
 
     if req.type == "requirements":
-        # 标题
         title = doc.add_heading('需求梳理报告', 0)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         doc.add_paragraph(f'生成时间：{__import__("datetime").datetime.now().strftime("%Y年%m月%d日 %H:%M")}').alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -619,18 +652,14 @@ async def export_word(req: WordExportReq):
             if isinstance(r, str):
                 doc.add_heading(f'{i+1}. {r}', 2)
                 continue
-            # 功能标题
             h = doc.add_heading(f'{i+1}. {r.get("module","功能")} · {r.get("feature","")}', 1)
-            # 功能说明
             p = doc.add_paragraph()
             p.add_run('功能说明：').bold = True
             p.add_run(r.get('description', ''))
-            # 处理流程
             if r.get('process'):
                 doc.add_paragraph().add_run('处理流程：').bold = True
                 for j, step in enumerate(r['process']):
                     doc.add_paragraph(f'{j+1}. {step}', style='List Number')
-            # 输入输出
             if r.get('inputs'):
                 p2 = doc.add_paragraph()
                 p2.add_run('输入数据：').bold = True
@@ -639,7 +668,6 @@ async def export_word(req: WordExportReq):
                 p3 = doc.add_paragraph()
                 p3.add_run('输出结果：').bold = True
                 p3.add_run('、'.join(r['outputs']))
-            # 界面草图
             if r.get('wireframe'):
                 p4 = doc.add_paragraph()
                 p4.add_run('界面布局：').bold = True
@@ -649,7 +677,6 @@ async def export_word(req: WordExportReq):
         filename = '需求梳理报告.docx'
 
     elif req.type == "prd":
-        # 解析 markdown 格式的 PRD 文本
         lines = req.prd_text.split('\n')
         for line in lines:
             line_stripped = line.strip()
@@ -673,7 +700,6 @@ async def export_word(req: WordExportReq):
                 p = doc.add_paragraph()
                 p.add_run(line_stripped.strip('*')).bold = True
             else:
-                # 处理行内加粗 **text**
                 p = doc.add_paragraph()
                 import re as _re
                 parts = _re.split(r'\*\*(.+?)\*\*', line_stripped)
@@ -710,7 +736,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
         content_type = file.content_type or "audio/webm"
         print(f"[transcribe] 收到文件: {fname}, 类型: {content_type}, 大小: {len(audio_bytes)} bytes")
 
-        # 尝试调用 Whisper
         transcript = client.audio.transcriptions.create(
             model="whisper-1",
             file=(fname, audio_bytes, content_type),
@@ -723,7 +748,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         err_msg = str(e)
         print(f"[transcribe] 错误: {err_msg}")
-        # 返回 200 + error 字段，前端可以显示具体原因
         return {"text": "", "error": f"识别失败：{err_msg[:200]}"}
 
 
@@ -778,13 +802,11 @@ async def generate_demo(req: DemoRequest):
             temperature=0.4
         )
         html = resp.choices[0].message.content.strip()
-        # 清理可能的 markdown 代码块包裹
         if html.startswith("```"):
             html = html.split("```", 2)[1]
             if html.startswith("html"):
                 html = html[4:]
             html = html.rsplit("```", 1)[0].strip()
-        # 校验是否包含有效 HTML
         if "<html" not in html.lower() and "<!doctype" not in html.lower():
             raise HTTPException(500, f"API返回内容不是有效HTML，可能被截断。原始内容前200字：{html[:200]}")
         return {"html": html}
@@ -811,107 +833,94 @@ async def login(req: LoginRequest):
     admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
     is_admin = 1 if email == admin_email else 0
 
-    conn = get_db()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT * FROM users WHERE email=%s", (email,))
-        user = cur.fetchone()
-        now = datetime.now().isoformat()
-        if user:
-            new_admin = max(is_admin, int(user["is_admin"]))
-            cur.execute("UPDATE users SET name=%s, last_active=%s, is_admin=%s WHERE email=%s",
-                        (name, now, new_admin, email))
-            conn.commit()
-            return {"token": user["token"], "user_id": user["id"],
-                    "user": {"name": name, "email": email, "is_admin": bool(new_admin)}}
-        else:
-            uid   = secrets.token_hex(8)
-            token = secrets.token_hex(24)
-            cur.execute("INSERT INTO users VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                        (uid, email, name, token, is_admin, now, now))
-            conn.commit()
-            return {"token": token, "user_id": uid,
-                    "user": {"name": name, "email": email, "is_admin": bool(is_admin)}}
-    finally:
-        cur.close(); conn.close()
+    rows = _sb("GET", "/rest/v1/users", params={"email": f"eq.{email}", "select": "*"})
+    now  = datetime.now().isoformat()
+
+    if rows and isinstance(rows, list):
+        user = rows[0]
+        new_admin = max(is_admin, int(user.get("is_admin", 0)))
+        _sb("PATCH", "/rest/v1/users",
+            data={"name": name, "last_active": now, "is_admin": new_admin},
+            params={"email": f"eq.{email}"})
+        return {"token": user["token"], "user_id": user["id"],
+                "user": {"name": name, "email": email, "is_admin": bool(new_admin)}}
+    else:
+        uid   = secrets.token_hex(8)
+        token = secrets.token_hex(24)
+        _sb("POST", "/rest/v1/users", data={
+            "id": uid, "email": email, "name": name, "token": token,
+            "is_admin": is_admin, "created_at": now, "last_active": now
+        })
+        return {"token": token, "user_id": uid,
+                "user": {"name": name, "email": email, "is_admin": bool(is_admin)}}
+
 
 @app.get("/api/auth/me")
 async def get_me(authorization: Optional[str] = Header(None)):
     user = require_token(authorization)
     return {"user_id": user["id"], "name": user["name"],
-            "email": user["email"], "is_admin": bool(user["is_admin"])}
+            "email": user["email"], "is_admin": bool(user.get("is_admin"))}
+
 
 @app.post("/api/sessions/save")
 async def save_session(req: SaveSessionRequest, authorization: Optional[str] = Header(None)):
     """保存或更新一条会话到服务端"""
     user = require_token(authorization)
     now  = datetime.now().isoformat()
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        sid = req.session_id or secrets.token_hex(10)
-        cur.execute("SELECT id FROM sessions WHERE id=%s AND user_id=%s", (sid, user["id"]))
-        existing = cur.fetchone()
-        h_json = json.dumps(req.history, ensure_ascii=False)
-        r_json = json.dumps(req.requirements, ensure_ascii=False)
-        if existing:
-            cur.execute("""UPDATE sessions SET history=%s,requirements=%s,mermaid=%s,
-                           completeness=%s,title=%s,updated_at=%s WHERE id=%s""",
-                        (h_json, r_json, req.mermaid, req.completeness, req.title, now, sid))
-        else:
-            cur.execute("""INSERT INTO sessions VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                        (sid, user["id"], req.title, h_json, r_json,
-                         req.mermaid, req.completeness, now, now))
-        conn.commit()
-        return {"session_id": sid, "updated_at": now}
-    finally:
-        cur.close(); conn.close()
+    sid  = req.session_id or secrets.token_hex(10)
+
+    h_json = json.dumps(req.history,      ensure_ascii=False)
+    r_json = json.dumps(req.requirements, ensure_ascii=False)
+
+    existing = _sb("GET", "/rest/v1/sessions",
+                   params={"id": f"eq.{sid}", "user_id": f"eq.{user['id']}", "select": "id"})
+
+    if existing and isinstance(existing, list):
+        _sb("PATCH", "/rest/v1/sessions",
+            data={"history": h_json, "requirements": r_json, "mermaid": req.mermaid,
+                  "completeness": req.completeness, "title": req.title, "updated_at": now},
+            params={"id": f"eq.{sid}"})
+    else:
+        _sb("POST", "/rest/v1/sessions", data={
+            "id": sid, "user_id": user["id"], "title": req.title,
+            "history": h_json, "requirements": r_json, "mermaid": req.mermaid,
+            "completeness": req.completeness, "created_at": now, "updated_at": now
+        })
+    return {"session_id": sid, "updated_at": now}
+
 
 @app.get("/api/sessions")
 async def list_sessions(authorization: Optional[str] = Header(None)):
     """获取当前用户的所有会话列表（不含完整 history）"""
     user = require_token(authorization)
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        cur.execute("""SELECT id,title,completeness,created_at,updated_at
-                       FROM sessions WHERE user_id=%s ORDER BY updated_at DESC""",
-                    (user["id"],))
-        return {"sessions": [dict(r) for r in cur.fetchall()]}
-    finally:
-        cur.close(); conn.close()
+    rows = _sb("GET", "/rest/v1/sessions",
+               params={"user_id": f"eq.{user['id']}",
+                       "select": "id,title,completeness,created_at,updated_at",
+                       "order": "updated_at.desc"})
+    return {"sessions": rows if isinstance(rows, list) else []}
+
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str, authorization: Optional[str] = Header(None)):
     """获取单条会话完整内容"""
     user = require_token(authorization)
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        cur.execute("SELECT * FROM sessions WHERE id=%s AND user_id=%s",
-                    (session_id, user["id"]))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(404, "会话不存在")
-        d = dict(row)
-        d["history"]      = json.loads(d["history"] or "[]")
-        d["requirements"] = json.loads(d["requirements"] or "[]")
-        return d
-    finally:
-        cur.close(); conn.close()
+    rows = _sb("GET", "/rest/v1/sessions",
+               params={"id": f"eq.{session_id}", "user_id": f"eq.{user['id']}", "select": "*"})
+    if not rows or not isinstance(rows, list):
+        raise HTTPException(404, "会话不存在")
+    d = dict(rows[0])
+    d["history"]      = json.loads(d.get("history")      or "[]")
+    d["requirements"] = json.loads(d.get("requirements") or "[]")
+    return d
+
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str, authorization: Optional[str] = Header(None)):
     user = require_token(authorization)
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        cur.execute("DELETE FROM sessions WHERE id=%s AND user_id=%s",
-                    (session_id, user["id"]))
-        conn.commit()
-        return {"ok": True}
-    finally:
-        cur.close(); conn.close()
+    _sb("DELETE", "/rest/v1/sessions",
+        params={"id": f"eq.{session_id}", "user_id": f"eq.{user['id']}"})
+    return {"ok": True}
+
 
 # ─────────────────────────────────────────────
 # 管理员看板
@@ -920,74 +929,75 @@ async def delete_session(session_id: str, authorization: Optional[str] = Header(
 @app.get("/api/admin/stats")
 async def admin_stats(authorization: Optional[str] = Header(None)):
     require_admin(authorization)
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        cur.execute("SELECT COUNT(*) FROM users"); users = cur.fetchone()["count"]
-        cur.execute("SELECT COUNT(*) FROM sessions"); sessions = cur.fetchone()["count"]
-        cur.execute("""SELECT COUNT(DISTINCT user_id) FROM sessions
-                       WHERE updated_at > (NOW() - INTERVAL '7 days')::text""")
-        active = cur.fetchone()["count"]
-        return {"total_users": users, "total_sessions": sessions, "active_7d": active}
-    finally:
-        cur.close(); conn.close()
+    total_users    = _sb_count("/rest/v1/users")
+    total_sessions = _sb_count("/rest/v1/sessions")
+    seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    active_rows    = _sb("GET", "/rest/v1/sessions",
+                         params={"updated_at": f"gte.{seven_days_ago}", "select": "user_id"})
+    active = len(set(r["user_id"] for r in (active_rows if isinstance(active_rows, list) else [])))
+    return {"total_users": total_users, "total_sessions": total_sessions, "active_7d": active}
+
 
 @app.get("/api/admin/users")
 async def admin_users(authorization: Optional[str] = Header(None)):
     require_admin(authorization)
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT u.id, u.name, u.email, u.created_at, u.last_active,
-                   COUNT(s.id) as session_count,
-                   MAX(s.updated_at) as last_session,
-                   MAX(s.completeness) as max_completeness
-            FROM users u
-            LEFT JOIN sessions s ON s.user_id = u.id
-            WHERE u.is_admin = 0
-            GROUP BY u.id ORDER BY u.last_active DESC
-        """)
-        return {"users": [dict(r) for r in cur.fetchall()]}
-    finally:
-        cur.close(); conn.close()
+    rows = _sb("GET", "/rest/v1/users",
+               params={"is_admin": "eq.0",
+                       "select": "id,name,email,created_at,last_active,sessions(id,completeness,updated_at)",
+                       "order": "last_active.desc.nullslast"})
+    result = []
+    for u in (rows if isinstance(rows, list) else []):
+        sessions_data = u.pop("sessions", None) or []
+        u["session_count"]    = len(sessions_data)
+        u["last_session"]     = max(
+            (s["updated_at"] for s in sessions_data if s.get("updated_at")), default=None)
+        u["max_completeness"] = max(
+            (s.get("completeness") or 0 for s in sessions_data), default=0)
+        result.append(u)
+    return {"users": result}
+
 
 @app.get("/api/admin/users/{user_id}/sessions")
 async def admin_user_sessions(user_id: str, authorization: Optional[str] = Header(None)):
     require_admin(authorization)
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        cur.execute("""SELECT id,title,completeness,created_at,updated_at
-                       FROM sessions WHERE user_id=%s ORDER BY updated_at DESC""",
-                    (user_id,))
-        return {"sessions": [dict(r) for r in cur.fetchall()]}
-    finally:
-        cur.close(); conn.close()
+    rows = _sb("GET", "/rest/v1/sessions",
+               params={"user_id": f"eq.{user_id}",
+                       "select": "id,title,completeness,created_at,updated_at",
+                       "order": "updated_at.desc"})
+    return {"sessions": rows if isinstance(rows, list) else []}
+
 
 @app.get("/api/admin/sessions/{session_id}")
 async def admin_get_session(session_id: str, authorization: Optional[str] = Header(None)):
     require_admin(authorization)
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        cur.execute("SELECT * FROM sessions WHERE id=%s", (session_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(404, "会话不存在")
-        d = dict(row)
-        d["history"]      = json.loads(d["history"] or "[]")
-        d["requirements"] = json.loads(d["requirements"] or "[]")
-        return d
-    finally:
-        cur.close(); conn.close()
+    rows = _sb("GET", "/rest/v1/sessions",
+               params={"id": f"eq.{session_id}", "select": "*"})
+    if not rows or not isinstance(rows, list):
+        raise HTTPException(404, "会话不存在")
+    d = dict(rows[0])
+    d["history"]      = json.loads(d.get("history")      or "[]")
+    d["requirements"] = json.loads(d.get("requirements") or "[]")
+    return d
+
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page():
     """管理员看板页面"""
-    return HTMLResponse(open("static/admin.html", encoding="utf-8").read()
-                        if os.path.exists("static/admin.html") else "<h1>管理页面未找到</h1>")
+    content = open("static/admin.html", encoding="utf-8").read() \
+              if os.path.exists("static/admin.html") else "<h1>管理页面未找到</h1>"
+    return HTMLResponse(content, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache", "Expires": "0"
+    })
 
+@app.get("/", response_class=HTMLResponse)
+async def index_page():
+    """主页面 — 禁止浏览器缓存，确保每次刷新都取最新 HTML"""
+    content = open("static/index.html", encoding="utf-8").read()
+    return HTMLResponse(content, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache", "Expires": "0"
+    })
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
