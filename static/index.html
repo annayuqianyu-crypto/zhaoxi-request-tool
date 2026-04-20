@@ -882,6 +882,7 @@
       <!-- Sub-tab navigation -->
       <div class="req-subnav">
         <button class="req-subbtn active" onclick="switchReqSub('summary',this)">📝 需求梳理</button>
+        <button class="req-subbtn" onclick="switchReqSub('flowchart',this)">📊 流程图</button>
         <button class="req-subbtn" onclick="switchReqSub('wireframe',this)">📐 线框图</button>
         <button class="req-subbtn" onclick="switchReqSub('preview',this)">🖥️ 页面展示</button>
         <button class="req-subbtn" onclick="switchReqSub('prd',this)">📄 PRD文档</button>
@@ -907,6 +908,30 @@
         <div class="gen-content-wrap">
           <div id="summary-list">
             <div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求<br><span style="font-size:12px;color:#cbd5e0">对话进行中也可随时生成</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 📊 业务流程图 -->
+      <div id="req-sub-flowchart" class="req-sub">
+        <div class="gen-header">
+          <div class="gen-header-left">
+            <span class="gen-icon">📊</span>
+            <div>
+              <div class="gen-title">业务流程图</div>
+              <div class="gen-subtitle">基于访谈内容生成完整业务流程图，包含角色、判断节点与异常处理</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div class="export-btn-group">
+              <button class="exp-btn" onclick="exportFlowchartPNG()" title="导出PNG图片">📷 图片</button>
+            </div>
+            <button class="gen-btn" id="gen-flowchart-btn" onclick="generateSection('flowchart')">⚡ 生成</button>
+          </div>
+        </div>
+        <div class="gen-content-wrap" style="padding:12px;">
+          <div id="req-flow-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;overflow:auto;">
+            <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将根据访谈内容生成完整的业务流程图</div>
           </div>
         </div>
       </div>
