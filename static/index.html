@@ -1155,6 +1155,28 @@
       <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API Key <span style="font-weight:400;color:#e53e3e">*必填</span></label>
       <input id="api-key-input" type="password" placeholder="sk-…" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
     </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">模型名称 <span style="font-weight:400;color:#a0aec0">（选填，默认 gpt-4o）</span></label>
+      <input id="api-model-input" type="text" placeholder="请输入模型名称，或点击下方推荐" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+      <!-- 模型推荐选项 -->
+      <div style="margin-top:8px">
+        <div style="font-size:11px;color:#a0aec0;margin-bottom:6px;display:flex;align-items:center;gap:5px"><span>💡</span> 点击快速填入推荐模型</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button onclick="pickModel('gpt-4o')" title="综合能力强，JSON格式遵从度高，推荐作为默认首选" style="padding:4px 10px;border:1.5px solid #bee3f8;border-radius:20px;background:#ebf8ff;color:#2b6cb0;font-size:11.5px;cursor:pointer;transition:all .15s;font-family:inherit" onmouseover="this.style.background='#bee3f8'" onmouseout="this.style.background='#ebf8ff'">🥇 gpt-4o</button>
+          <button onclick="pickModel('gpt-4o-mini')" title="速度快、成本低，适合轻量场景" style="padding:4px 10px;border:1.5px solid #bee3f8;border-radius:20px;background:#ebf8ff;color:#2b6cb0;font-size:11.5px;cursor:pointer;transition:all .15s;font-family:inherit" onmouseover="this.style.background='#bee3f8'" onmouseout="this.style.background='#ebf8ff'">⚡ gpt-4o-mini</button>
+          <button onclick="pickModel('claude-3-5-sonnet-20241022')" title="Anthropic出品，结构化JSON输出最稳定，追问逻辑最严密，强烈推荐用于需求锐化" style="padding:4px 10px;border:1.5px solid #d6bcfa;border-radius:20px;background:#faf5ff;color:#6b46c1;font-size:11.5px;cursor:pointer;transition:all .15s;font-family:inherit" onmouseover="this.style.background='#e9d8fd'" onmouseout="this.style.background='#faf5ff'">✨ claude-3-5-sonnet</button>
+          <button onclick="pickModel('deepseek-v3')" title="中文理解一流，成本极低，适合推广试用阶段" style="padding:4px 10px;border:1.5px solid #9ae6b4;border-radius:20px;background:#f0fff4;color:#276749;font-size:11.5px;cursor:pointer;transition:all .15s;font-family:inherit" onmouseover="this.style.background='#c6f6d5'" onmouseout="this.style.background='#f0fff4'">🇨🇳 deepseek-v3</button>
+          <button onclick="pickModel('deepseek-r1')" title="深度推理模型，适合复杂需求场景，但响应较慢" style="padding:4px 10px;border:1.5px solid #9ae6b4;border-radius:20px;background:#f0fff4;color:#276749;font-size:11.5px;cursor:pointer;transition:all .15s;font-family:inherit" onmouseover="this.style.background='#c6f6d5'" onmouseout="this.style.background='#f0fff4'">🧠 deepseek-r1</button>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:#a0aec0;line-height:1.7;padding:7px 10px;background:#fafbfc;border-radius:6px;border:1px solid #edf2f7">
+          🥇 <strong style="color:#2b6cb0">gpt-4o</strong> — 均衡首选，JSON稳定，适合大多数场景<br>
+          ✨ <strong style="color:#6b46c1">claude-3-5-sonnet</strong> — 需求锐化最优，追问最严密<br>
+          🇨🇳 <strong style="color:#276749">deepseek-v3</strong> — 中文最强，成本最低，推广试用推荐<br>
+          🧠 <strong style="color:#276749">deepseek-r1</strong> — 深度推理，复杂业务场景适用<br>
+          ⚡ <strong style="color:#2b6cb0">gpt-4o-mini</strong> — 快速省钱，轻量测试场景
+        </div>
+      </div>
+    </div>
     <!-- 连通性测试结果 -->
     <div id="api-test-result" style="display:none;margin-bottom:14px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6"></div>
     <div style="display:flex;gap:10px;justify-content:space-between;align-items:center">
@@ -1444,43 +1466,57 @@ function showToast(msg) {
 
 // ── API 设置（每人用自己的 Key）──
 function getApiHeaders() {
-  const key = localStorage.getItem('wolfai_api_key') || '';
-  const url = localStorage.getItem('wolfai_api_url') || '';
+  const key   = localStorage.getItem('wolfai_api_key')   || '';
+  const url   = localStorage.getItem('wolfai_api_url')   || '';
+  const model = localStorage.getItem('wolfai_api_model') || '';
   const h = { 'Content-Type': 'application/json' };
-  if (key) h['X-Api-Key'] = key;
-  if (url) h['X-Api-Url'] = url;
+  if (key)   h['X-Api-Key']   = key;
+  if (url)   h['X-Api-Url']   = url;
+  if (model) h['X-Api-Model'] = model;
   return h;
 }
 function getApiHeadersMultipart() {
   // FormData 上传不能设 Content-Type，仅带 API 凭据
-  const key = localStorage.getItem('wolfai_api_key') || '';
-  const url = localStorage.getItem('wolfai_api_url') || '';
+  const key   = localStorage.getItem('wolfai_api_key')   || '';
+  const url   = localStorage.getItem('wolfai_api_url')   || '';
+  const model = localStorage.getItem('wolfai_api_model') || '';
   const h = {};
-  if (key) h['X-Api-Key'] = key;
-  if (url) h['X-Api-Url'] = url;
+  if (key)   h['X-Api-Key']   = key;
+  if (url)   h['X-Api-Url']   = url;
+  if (model) h['X-Api-Model'] = model;
   return h;
 }
+function pickModel(name) {
+  document.getElementById('api-model-input').value = name;
+  document.getElementById('api-test-result').style.display = 'none';
+}
 function openApiSettings() {
-  document.getElementById('api-url-input').value = localStorage.getItem('wolfai_api_url') || '';
-  document.getElementById('api-key-input').value = localStorage.getItem('wolfai_api_key') || '';
+  document.getElementById('api-url-input').value   = localStorage.getItem('wolfai_api_url')   || '';
+  document.getElementById('api-key-input').value   = localStorage.getItem('wolfai_api_key')   || '';
+  document.getElementById('api-model-input').value = localStorage.getItem('wolfai_api_model') || '';
+  document.getElementById('api-test-result').style.display = 'none';
   document.getElementById('api-settings-modal').style.display = 'flex';
 }
 function closeApiSettings() {
   document.getElementById('api-settings-modal').style.display = 'none';
 }
 function saveApiSettings() {
-  const key = document.getElementById('api-key-input').value.trim();
-  const url = document.getElementById('api-url-input').value.trim();
-  if (key) localStorage.setItem('wolfai_api_key', key);
-  else localStorage.removeItem('wolfai_api_key');
-  if (url) localStorage.setItem('wolfai_api_url', url);
-  else localStorage.removeItem('wolfai_api_url');
+  const key   = document.getElementById('api-key-input').value.trim();
+  const url   = document.getElementById('api-url-input').value.trim();
+  const model = document.getElementById('api-model-input').value.trim();
+  if (key)   localStorage.setItem('wolfai_api_key', key);
+  else       localStorage.removeItem('wolfai_api_key');
+  if (url)   localStorage.setItem('wolfai_api_url', url);
+  else       localStorage.removeItem('wolfai_api_url');
+  if (model) localStorage.setItem('wolfai_api_model', model);
+  else       localStorage.removeItem('wolfai_api_model');
   closeApiSettings();
-  showToast('✅ API 设置已保存');
+  showToast('✅ API 设置已保存' + (model ? `（模型：${model}）` : ''));
 }
 async function testApiConnection() {
-  const key = document.getElementById('api-key-input').value.trim();
-  const url = document.getElementById('api-url-input').value.trim();
+  const key   = document.getElementById('api-key-input').value.trim();
+  const url   = document.getElementById('api-url-input').value.trim();
+  const model = document.getElementById('api-model-input').value.trim();
   if (!key) {
     _setTestResult('warn', '⚠️ 请先填写 API Key');
     return;
@@ -1489,15 +1525,16 @@ async function testApiConnection() {
   btn.textContent = '测试中…'; btn.disabled = true;
   _setTestResult('info', '🔄 正在连接，请稍候…');
   const h = { 'Content-Type': 'application/json' };
-  if (key) h['X-Api-Key'] = key;
-  if (url) h['X-Api-Url'] = url;
+  if (key)   h['X-Api-Key']   = key;
+  if (url)   h['X-Api-Url']   = url;
+  if (model) h['X-Api-Model'] = model;
   const t0 = Date.now();
   try {
     const resp = await fetch('/api/test-connection', { method: 'POST', headers: h });
     const ms = Date.now() - t0;
     const data = await resp.json();
     if (resp.ok && data.ok) {
-      _setTestResult('ok', `✅ 连接成功！响应时长 ${ms}ms`);
+      _setTestResult('ok', `✅ 连接成功！模型：${data.model || model || 'gpt-4o'}，响应时长 ${ms}ms`);
     } else {
       _setTestResult('err', '❌ ' + (data.detail || data.error || `HTTP ${resp.status}`));
     }

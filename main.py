@@ -22,6 +22,7 @@ app = FastAPI()
 # 默认 AI 配置（从环境变量读取，用户未传入时作为 fallback）
 _DEFAULT_API_KEY = os.environ.get("WOLFAI_API_KEY", "")
 _DEFAULT_API_URL = os.environ.get("WOLFAI_API_URL", "https://wolfai.top/v1")
+_DEFAULT_MODEL   = os.environ.get("WOLFAI_MODEL",   "gpt-4o")
 
 def _get_client(api_key: Optional[str] = None, api_url: Optional[str] = None) -> OpenAI:
     """根据请求头中的 key/url 创建 OpenAI 客户端；未提供则使用环境变量默认值。"""
@@ -30,6 +31,10 @@ def _get_client(api_key: Optional[str] = None, api_url: Optional[str] = None) ->
     if not key:
         raise HTTPException(400, "未配置 API Key，请在页面右上角「⚙ API设置」中填写")
     return OpenAI(api_key=key, base_url=url)
+
+def _get_model(api_model: Optional[str] = None) -> str:
+    """返回本次请求使用的模型名；未指定则取环境变量默认值。"""
+    return (api_model or "").strip() or _DEFAULT_MODEL
 
 # ─────────────────────────────────────────────
 # Supabase REST API（走 HTTPS，自动通过系统代理）
@@ -364,16 +369,18 @@ async def init():
 
 @app.post("/api/test-connection")
 async def test_connection(x_api_key: Optional[str] = Header(None),
-                          x_api_url: Optional[str] = Header(None)):
-    """用极小的 completion 请求验证 API Key 与 URL 是否有效"""
+                          x_api_url: Optional[str] = Header(None),
+                          x_api_model: Optional[str] = Header(None)):
+    """用极小的 completion 请求验证 API Key / URL / Model 是否有效"""
     client = _get_client(x_api_key, x_api_url)
+    model  = _get_model(x_api_model)
     try:
         client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[{"role": "user", "content": "hi"}],
             max_tokens=1,
         )
-        return {"ok": True}
+        return {"ok": True, "model": model}
     except Exception as e:
         raise HTTPException(400, f"连接失败：{str(e)[:200]}")
 
@@ -408,14 +415,16 @@ async def upload_file(file: UploadFile = File(...)):
 @app.post("/api/chat")
 async def chat(req: ChatRequest,
                x_api_key: Optional[str] = Header(None),
-               x_api_url: Optional[str] = Header(None)):
+               x_api_url: Optional[str] = Header(None),
+               x_api_model: Optional[str] = Header(None)):
     client = _get_client(x_api_key, x_api_url)
+    model  = _get_model(x_api_model)
     messages = [{"role": m.role, "content": m.content} for m in req.history]
     messages.append({"role": "user", "content": req.message})
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             max_tokens=2048,
             messages=[{"role": "system", "content": SYSTEM_PROMPT}] + messages,
         )
@@ -428,8 +437,10 @@ async def chat(req: ChatRequest,
 @app.post("/api/export")
 async def export_doc(req: ExportRequest,
                      x_api_key: Optional[str] = Header(None),
-                     x_api_url: Optional[str] = Header(None)):
+                     x_api_url: Optional[str] = Header(None),
+                     x_api_model: Optional[str] = Header(None)):
     client = _get_client(x_api_key, x_api_url)
+    model  = _get_model(x_api_model)
     history_text = "\n\n".join(
         f"**{'业务方' if m.role == 'user' else '分析师'}**：{m.content}"
         for m in req.history
@@ -475,7 +486,7 @@ async def export_doc(req: ExportRequest,
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -488,8 +499,10 @@ async def export_doc(req: ExportRequest,
 @app.post("/api/generate")
 async def generate_section(req: GenerateRequest,
                             x_api_key: Optional[str] = Header(None),
-                            x_api_url: Optional[str] = Header(None)):
+                            x_api_url: Optional[str] = Header(None),
+                            x_api_model: Optional[str] = Header(None)):
     client = _get_client(x_api_key, x_api_url)
+    model  = _get_model(x_api_model)
     history_text = "\n\n".join(
         f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
         for m in req.history
@@ -509,7 +522,7 @@ async def generate_section(req: GenerateRequest,
 - 只输出 Mermaid 代码，不要任何其他文字"""
         try:
             response = client.chat.completions.create(
-                model="gpt-4o", max_tokens=2000,
+                model=model, max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}]
             )
         except Exception as e:
@@ -538,7 +551,7 @@ async def generate_section(req: GenerateRequest,
 - 只输出 Mermaid 代码，不要任何其他文字"""
         try:
             response = client.chat.completions.create(
-                model="gpt-4o", max_tokens=2500,
+                model=model, max_tokens=2500,
                 messages=[{"role": "user", "content": prompt}]
             )
         except Exception as e:
@@ -565,7 +578,7 @@ async def generate_section(req: GenerateRequest,
 - 确保 JSON 格式合法"""
         try:
             response = client.chat.completions.create(
-                model="gpt-4o", max_tokens=3000,
+                model=model, max_tokens=3000,
                 messages=[{"role": "user", "content": prompt}]
             )
         except Exception as e:
@@ -591,8 +604,10 @@ async def generate_section(req: GenerateRequest,
 @app.post("/api/analyze-definition")
 async def analyze_definition(req: ExportRequest,
                               x_api_key: Optional[str] = Header(None),
-                              x_api_url: Optional[str] = Header(None)):
+                              x_api_url: Optional[str] = Header(None),
+                              x_api_model: Optional[str] = Header(None)):
     client = _get_client(x_api_key, x_api_url)
+    model  = _get_model(x_api_model)
     history_text = "\n\n".join(
         f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
         for m in req.history
@@ -645,7 +660,7 @@ async def analyze_definition(req: ExportRequest,
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o", max_tokens=1500,
+            model=model, max_tokens=1500,
             messages=[{"role": "user", "content": prompt}]
         )
     except Exception as e:
@@ -763,8 +778,9 @@ async def export_word(req: WordExportReq):
 @app.post("/api/transcribe")
 async def transcribe_audio(file: UploadFile = File(...),
                            x_api_key: Optional[str] = Header(None),
-                           x_api_url: Optional[str] = Header(None)):
-    """接收录音文件，调用 Whisper 转文字"""
+                           x_api_url: Optional[str] = Header(None),
+                           x_api_model: Optional[str] = Header(None)):
+    """接收录音文件，调用 Whisper 转文字（语音模型固定为 whisper-1）"""
     client = _get_client(x_api_key, x_api_url)
     try:
         audio_bytes = await file.read()
@@ -793,9 +809,11 @@ async def transcribe_audio(file: UploadFile = File(...),
 @app.post("/api/generate-demo")
 async def generate_demo(req: DemoRequest,
                         x_api_key: Optional[str] = Header(None),
-                        x_api_url: Optional[str] = Header(None)):
+                        x_api_url: Optional[str] = Header(None),
+                        x_api_model: Optional[str] = Header(None)):
     """根据需求访谈内容生成可交互的HTML原型Demo"""
     client = _get_client(x_api_key, x_api_url)
+    model  = _get_model(x_api_model)
     history_text = "\n".join(
         f"{'用户' if m.role=='user' else 'AI分析师'}: {m.content[:300]}"
         for m in req.history[-30:]
@@ -835,7 +853,7 @@ async def generate_demo(req: DemoRequest,
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[
                 {"role": "system", "content": "你是专业的前端原型工程师，直接输出完整HTML代码，不含任何Markdown标记或解释。"},
                 {"role": "user", "content": prompt}
