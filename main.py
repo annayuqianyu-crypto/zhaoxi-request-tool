@@ -40,8 +40,8 @@ def _get_model(api_model: Optional[str] = None) -> str:
 # Supabase REST API（走 HTTPS，自动通过系统代理）
 # 彻底替代 psycopg2 直连，解决 TCP/5432 被代理拦截问题
 # ─────────────────────────────────────────────
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://nbjdukzpjblpavnmmwmm.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://nbjdukzpjblpavnmmwmm.supabase.co").strip()
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
 
 
 def _sb(method: str, path: str, *, data=None, params: dict = None, extra_headers: dict = None):
