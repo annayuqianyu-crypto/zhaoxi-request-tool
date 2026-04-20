@@ -617,6 +617,7 @@
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
       <span class="progress-pct" id="progress-pct">0%</span>
     </div>
+    <button class="hdr-btn" onclick="openApiSettings()" title="配置个人 AI API Key 与接口地址">⚙ API设置</button>
     <button class="hdr-btn" onclick="saveCurrentSession(null)" title="保存当前会话进度">💾 保存</button>
     <button class="hdr-btn" onclick="showSessionsPanel()" title="查看所有已保存任务">📋 任务列表</button>
     <button class="hdr-btn hdr-new" onclick="newSession()" title="开始一个全新的需求访谈">➕ 新任务</button>
@@ -1138,6 +1139,29 @@
   </div>
 </div>
 
+<!-- ── API Settings Modal ── -->
+<div id="api-settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:300;align-items:center;justify-content:center" onclick="if(event.target===this)closeApiSettings()">
+  <div style="background:white;border-radius:16px;width:460px;max-width:92vw;padding:28px 28px 22px;box-shadow:0 24px 64px rgba(0,0,0,.32)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h2 style="margin:0;font-size:16px;font-weight:700;color:var(--navy)">⚙ AI 接口设置</h2>
+      <button onclick="closeApiSettings()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#a0aec0;line-height:1;padding:0 4px">✕</button>
+    </div>
+    <p style="font-size:12px;color:#718096;margin:0 0 20px;line-height:1.75;background:#f7fafc;border-radius:8px;padding:10px 12px;border:1px solid var(--border)">请填写您自己的 AI API 凭据。设置仅保存在本地浏览器中，不会上传服务器。<br>默认接口地址：<code style="font-size:11px;color:#4a5568">https://wolfai.top/v1</code></p>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API URL <span style="font-weight:400;color:#a0aec0">（选填，默认 wolfai.top）</span></label>
+      <input id="api-url-input" type="text" placeholder="https://wolfai.top/v1" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+    <div style="margin-bottom:22px">
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API Key <span style="font-weight:400;color:#e53e3e">*必填</span></label>
+      <input id="api-key-input" type="password" placeholder="sk-…" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeApiSettings()" style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:white;font-size:13px;cursor:pointer;color:#4a5568;font-weight:500">取消</button>
+      <button onclick="saveApiSettings()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--navy);color:white;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s" onmouseover="this.style.background='#2a4a7f'" onmouseout="this.style.background='var(--navy)'">保存设置</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Export Modal ── -->
 <div id="modal-overlay" onclick="closeModalOnOverlay(event)">
   <div id="modal-box">
@@ -1287,7 +1311,7 @@ async function sendMessage() {
   try {
     const resp = await fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify({ history: history.slice(0, -1), message: fullContent })
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -1411,6 +1435,43 @@ function showToast(msg) {
   el.classList.add('show');
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ── API 设置（每人用自己的 Key）──
+function getApiHeaders() {
+  const key = localStorage.getItem('wolfai_api_key') || '';
+  const url = localStorage.getItem('wolfai_api_url') || '';
+  const h = { 'Content-Type': 'application/json' };
+  if (key) h['X-Api-Key'] = key;
+  if (url) h['X-Api-Url'] = url;
+  return h;
+}
+function getApiHeadersMultipart() {
+  // FormData 上传不能设 Content-Type，仅带 API 凭据
+  const key = localStorage.getItem('wolfai_api_key') || '';
+  const url = localStorage.getItem('wolfai_api_url') || '';
+  const h = {};
+  if (key) h['X-Api-Key'] = key;
+  if (url) h['X-Api-Url'] = url;
+  return h;
+}
+function openApiSettings() {
+  document.getElementById('api-url-input').value = localStorage.getItem('wolfai_api_url') || '';
+  document.getElementById('api-key-input').value = localStorage.getItem('wolfai_api_key') || '';
+  document.getElementById('api-settings-modal').style.display = 'flex';
+}
+function closeApiSettings() {
+  document.getElementById('api-settings-modal').style.display = 'none';
+}
+function saveApiSettings() {
+  const key = document.getElementById('api-key-input').value.trim();
+  const url = document.getElementById('api-url-input').value.trim();
+  if (key) localStorage.setItem('wolfai_api_key', key);
+  else localStorage.removeItem('wolfai_api_key');
+  if (url) localStorage.setItem('wolfai_api_url', url);
+  else localStorage.removeItem('wolfai_api_url');
+  closeApiSettings();
+  showToast('✅ API 设置已保存');
 }
 
 function flashTab(type) {
@@ -1870,7 +1931,7 @@ async function generateSection(type) {
     }
     const resp = await fetch('/api/generate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify({ history, requirements: currentRequirements, type })
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -1985,7 +2046,7 @@ async function generateDemo() {
   try {
     const resp = await fetch('/api/generate-demo', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
     });
     if (!resp.ok) {
@@ -2044,7 +2105,7 @@ async function generatePRDInline() {
   try {
     const resp = await fetch('/api/export', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -2269,7 +2330,7 @@ async function startMediaRecorder(btn) {
       const fd = new FormData();
       fd.append('file', blob, `rec.${ext}`);
 
-      const resp = await fetch('/api/transcribe', { method: 'POST', body: fd });
+      const resp = await fetch('/api/transcribe', { method: 'POST', headers: getApiHeadersMultipart(), body: fd });
       if (!resp.ok) {
         const err = await resp.text();
         throw new Error(`服务返回 ${resp.status}: ${err.slice(0,120)}`);
@@ -2312,7 +2373,7 @@ async function startExport() {
   try {
     const resp = await fetch('/api/export', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -2703,7 +2764,7 @@ async function analyzeDefinition() {
   document.getElementById('def-analysis-result').style.display = 'none';
   try {
     const resp = await fetch('/api/analyze-definition', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: getApiHeaders(),
       body: JSON.stringify({ history, requirements: currentRequirements, mermaid: currentMermaid })
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);

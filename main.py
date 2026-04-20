@@ -18,10 +18,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
-client = OpenAI(
-    api_key=os.environ.get("WOLFAI_API_KEY"),
-    base_url="https://wolfai.top/v1"
-)
+
+# 默认 AI 配置（从环境变量读取，用户未传入时作为 fallback）
+_DEFAULT_API_KEY = os.environ.get("WOLFAI_API_KEY", "")
+_DEFAULT_API_URL = os.environ.get("WOLFAI_API_URL", "https://wolfai.top/v1")
+
+def _get_client(api_key: Optional[str] = None, api_url: Optional[str] = None) -> OpenAI:
+    """根据请求头中的 key/url 创建 OpenAI 客户端；未提供则使用环境变量默认值。"""
+    key = (api_key or "").strip() or _DEFAULT_API_KEY
+    url = (api_url or "").strip() or _DEFAULT_API_URL
+    if not key:
+        raise HTTPException(400, "未配置 API Key，请在页面右上角「⚙ API设置」中填写")
+    return OpenAI(api_key=key, base_url=url)
 
 # ─────────────────────────────────────────────
 # Supabase REST API（走 HTTPS，自动通过系统代理）
@@ -382,7 +390,10 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest,
+               x_api_key: Optional[str] = Header(None),
+               x_api_url: Optional[str] = Header(None)):
+    client = _get_client(x_api_key, x_api_url)
     messages = [{"role": m.role, "content": m.content} for m in req.history]
     messages.append({"role": "user", "content": req.message})
 
@@ -399,7 +410,10 @@ async def chat(req: ChatRequest):
 
 
 @app.post("/api/export")
-async def export_doc(req: ExportRequest):
+async def export_doc(req: ExportRequest,
+                     x_api_key: Optional[str] = Header(None),
+                     x_api_url: Optional[str] = Header(None)):
+    client = _get_client(x_api_key, x_api_url)
     history_text = "\n\n".join(
         f"**{'业务方' if m.role == 'user' else '分析师'}**：{m.content}"
         for m in req.history
@@ -456,7 +470,10 @@ async def export_doc(req: ExportRequest):
 
 
 @app.post("/api/generate")
-async def generate_section(req: GenerateRequest):
+async def generate_section(req: GenerateRequest,
+                            x_api_key: Optional[str] = Header(None),
+                            x_api_url: Optional[str] = Header(None)):
+    client = _get_client(x_api_key, x_api_url)
     history_text = "\n\n".join(
         f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
         for m in req.history
@@ -556,7 +573,10 @@ async def generate_section(req: GenerateRequest):
 
 
 @app.post("/api/analyze-definition")
-async def analyze_definition(req: ExportRequest):
+async def analyze_definition(req: ExportRequest,
+                              x_api_key: Optional[str] = Header(None),
+                              x_api_url: Optional[str] = Header(None)):
+    client = _get_client(x_api_key, x_api_url)
     history_text = "\n\n".join(
         f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
         for m in req.history
@@ -725,8 +745,11 @@ async def export_word(req: WordExportReq):
 
 
 @app.post("/api/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
+async def transcribe_audio(file: UploadFile = File(...),
+                           x_api_key: Optional[str] = Header(None),
+                           x_api_url: Optional[str] = Header(None)):
     """接收录音文件，调用 Whisper 转文字"""
+    client = _get_client(x_api_key, x_api_url)
     try:
         audio_bytes = await file.read()
         if not audio_bytes:
@@ -752,8 +775,11 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
 
 @app.post("/api/generate-demo")
-async def generate_demo(req: DemoRequest):
+async def generate_demo(req: DemoRequest,
+                        x_api_key: Optional[str] = Header(None),
+                        x_api_url: Optional[str] = Header(None)):
     """根据需求访谈内容生成可交互的HTML原型Demo"""
+    client = _get_client(x_api_key, x_api_url)
     history_text = "\n".join(
         f"{'用户' if m.role=='user' else 'AI分析师'}: {m.content[:300]}"
         for m in req.history[-30:]
