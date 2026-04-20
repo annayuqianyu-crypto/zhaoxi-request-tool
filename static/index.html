@@ -1146,18 +1146,23 @@
       <h2 style="margin:0;font-size:16px;font-weight:700;color:var(--navy)">⚙ AI 接口设置</h2>
       <button onclick="closeApiSettings()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#a0aec0;line-height:1;padding:0 4px">✕</button>
     </div>
-    <p style="font-size:12px;color:#718096;margin:0 0 20px;line-height:1.75;background:#f7fafc;border-radius:8px;padding:10px 12px;border:1px solid var(--border)">请填写您自己的 AI API 凭据。设置仅保存在本地浏览器中，不会上传服务器。<br>默认接口地址：<code style="font-size:11px;color:#4a5568">https://wolfai.top/v1</code></p>
+    <p style="font-size:12px;color:#718096;margin:0 0 20px;line-height:1.75;background:#f7fafc;border-radius:8px;padding:10px 12px;border:1px solid var(--border)">请填写您自己的 AI API 凭据。设置仅保存在本地浏览器中，不会上传服务器。</p>
     <div style="margin-bottom:14px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API URL <span style="font-weight:400;color:#a0aec0">（选填，默认 wolfai.top）</span></label>
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API URL <span style="font-weight:400;color:#a0aec0">（选填）</span></label>
       <input id="api-url-input" type="text" placeholder="https://wolfai.top/v1" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
     </div>
-    <div style="margin-bottom:22px">
+    <div style="margin-bottom:16px">
       <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API Key <span style="font-weight:400;color:#e53e3e">*必填</span></label>
       <input id="api-key-input" type="password" placeholder="sk-…" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
     </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button onclick="closeApiSettings()" style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:white;font-size:13px;cursor:pointer;color:#4a5568;font-weight:500">取消</button>
-      <button onclick="saveApiSettings()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--navy);color:white;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s" onmouseover="this.style.background='#2a4a7f'" onmouseout="this.style.background='var(--navy)'">保存设置</button>
+    <!-- 连通性测试结果 -->
+    <div id="api-test-result" style="display:none;margin-bottom:14px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6"></div>
+    <div style="display:flex;gap:10px;justify-content:space-between;align-items:center">
+      <button id="api-test-btn" onclick="testApiConnection()" style="padding:8px 16px;border:1.5px solid var(--blue);border-radius:8px;background:var(--blue-light);font-size:13px;cursor:pointer;color:var(--blue);font-weight:600;transition:all .2s" onmouseover="this.style.background='#bee3f8'" onmouseout="this.style.background='var(--blue-light)'">🔌 测试连通性</button>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeApiSettings()" style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:white;font-size:13px;cursor:pointer;color:#4a5568;font-weight:500">取消</button>
+        <button onclick="saveApiSettings()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--navy);color:white;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s" onmouseover="this.style.background='#2a4a7f'" onmouseout="this.style.background='var(--navy)'">保存设置</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1472,6 +1477,49 @@ function saveApiSettings() {
   else localStorage.removeItem('wolfai_api_url');
   closeApiSettings();
   showToast('✅ API 设置已保存');
+}
+async function testApiConnection() {
+  const key = document.getElementById('api-key-input').value.trim();
+  const url = document.getElementById('api-url-input').value.trim();
+  if (!key) {
+    _setTestResult('warn', '⚠️ 请先填写 API Key');
+    return;
+  }
+  const btn = document.getElementById('api-test-btn');
+  btn.textContent = '测试中…'; btn.disabled = true;
+  _setTestResult('info', '🔄 正在连接，请稍候…');
+  const h = { 'Content-Type': 'application/json' };
+  if (key) h['X-Api-Key'] = key;
+  if (url) h['X-Api-Url'] = url;
+  const t0 = Date.now();
+  try {
+    const resp = await fetch('/api/test-connection', { method: 'POST', headers: h });
+    const ms = Date.now() - t0;
+    const data = await resp.json();
+    if (resp.ok && data.ok) {
+      _setTestResult('ok', `✅ 连接成功！响应时长 ${ms}ms`);
+    } else {
+      _setTestResult('err', '❌ ' + (data.detail || data.error || `HTTP ${resp.status}`));
+    }
+  } catch(e) {
+    _setTestResult('err', '❌ 网络错误：' + e.message);
+  } finally {
+    btn.textContent = '🔌 测试连通性'; btn.disabled = false;
+  }
+}
+function _setTestResult(type, msg) {
+  const el = document.getElementById('api-test-result');
+  const cfg = {
+    ok:   { bg:'#f0fff4', border:'1px solid #9ae6b4', color:'#276749' },
+    err:  { bg:'#fff5f5', border:'1px solid #feb2b2', color:'#c53030' },
+    warn: { bg:'#fffaf0', border:'1px solid #fbd38d', color:'#7b341e' },
+    info: { bg:'#ebf8ff', border:'1px solid #bee3f8', color:'#2c5282' },
+  }[type] || { bg:'#ebf8ff', border:'1px solid #bee3f8', color:'#2c5282' };
+  el.style.display = 'block';
+  el.style.background = cfg.bg;
+  el.style.border = cfg.border;
+  el.style.color = cfg.color;
+  el.textContent = msg;
 }
 
 function flashTab(type) {

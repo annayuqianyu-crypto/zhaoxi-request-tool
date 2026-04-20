@@ -362,6 +362,22 @@ async def init():
     return OPENING_MESSAGE
 
 
+@app.post("/api/test-connection")
+async def test_connection(x_api_key: Optional[str] = Header(None),
+                          x_api_url: Optional[str] = Header(None)):
+    """用极小的 completion 请求验证 API Key 与 URL 是否有效"""
+    client = _get_client(x_api_key, x_api_url)
+    try:
+        client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=1,
+        )
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(400, f"连接失败：{str(e)[:200]}")
+
+
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     filename = file.filename or ""
