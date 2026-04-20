@@ -76,9 +76,14 @@ def _sb(method: str, path: str, *, data=None, params: dict = None, extra_headers
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
         err = e.read().decode(errors="replace")
-        raise HTTPException(e.code, f"数据库错误: {err[:300]}")
+        print(f"[Supabase HTTPError] {method} {path} → {e.code}: {err[:300]}")
+        raise HTTPException(e.code, f"数据库错误 {e.code}: {err[:300]}")
     except urllib.error.URLError as e:
+        print(f"[Supabase URLError] {method} {path} → {e.reason}")
         raise HTTPException(503, f"数据库连接失败: {e.reason}")
+    except Exception as e:
+        print(f"[Supabase Exception] {method} {path} → {type(e).__name__}: {e}")
+        raise HTTPException(500, f"数据库异常: {type(e).__name__}: {str(e)[:200]}")
 
 
 def _sb_count(path: str, params: dict = None) -> int:
@@ -883,36 +888,45 @@ async def generate_demo(req: DemoRequest,
 @app.post("/api/auth/login")
 async def login(req: LoginRequest):
     """邮箱登录（无密码，内部工具）。首次自动注册，老用户直接返回 token。"""
-    email = req.email.strip().lower()
-    name  = req.name.strip()
-    if not email or "@" not in email:
-        raise HTTPException(400, "请输入有效的邮箱地址")
-    if not name:
-        raise HTTPException(400, "请输入您的姓名")
+    try:
+        email = req.email.strip().lower()
+        name  = req.name.strip()
+        if not email or "@" not in email:
+            raise HTTPException(400, "请输入有效的邮箱地址")
+        if not name:
+            raise HTTPException(400, "请输入您的姓名")
 
-    admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
-    is_admin = 1 if email == admin_email else 0
+        admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
+        is_admin = 1 if email == admin_email else 0
 
-    rows = _sb("GET", "/rest/v1/users", params={"email": f"eq.{email}", "select": "*"})
-    now  = datetime.now().isoformat()
+        print(f"[login] 尝试登录: {email}")
+        rows = _sb("GET", "/rest/v1/users", params={"email": f"eq.{email}", "select": "*"})
+        now  = datetime.now().isoformat()
 
-    if rows and isinstance(rows, list):
-        user = rows[0]
-        new_admin = max(is_admin, int(user.get("is_admin", 0)))
-        _sb("PATCH", "/rest/v1/users",
-            data={"name": name, "last_active": now, "is_admin": new_admin},
-            params={"email": f"eq.{email}"})
-        return {"token": user["token"], "user_id": user["id"],
-                "user": {"name": name, "email": email, "is_admin": bool(new_admin)}}
-    else:
-        uid   = secrets.token_hex(8)
-        token = secrets.token_hex(24)
-        _sb("POST", "/rest/v1/users", data={
-            "id": uid, "email": email, "name": name, "token": token,
-            "is_admin": is_admin, "created_at": now, "last_active": now
-        })
-        return {"token": token, "user_id": uid,
-                "user": {"name": name, "email": email, "is_admin": bool(is_admin)}}
+        if rows and isinstance(rows, list):
+            user = rows[0]
+            new_admin = max(is_admin, int(user.get("is_admin", 0)))
+            _sb("PATCH", "/rest/v1/users",
+                data={"name": name, "last_active": now, "is_admin": new_admin},
+                params={"email": f"eq.{email}"})
+            print(f"[login] 老用户登录成功: {email}")
+            return {"token": user["token"], "user_id": user["id"],
+                    "user": {"name": name, "email": email, "is_admin": bool(new_admin)}}
+        else:
+            uid   = secrets.token_hex(8)
+            token = secrets.token_hex(24)
+            _sb("POST", "/rest/v1/users", data={
+                "id": uid, "email": email, "name": name, "token": token,
+                "is_admin": is_admin, "created_at": now, "last_active": now
+            })
+            print(f"[login] 新用户注册成功: {email}")
+            return {"token": token, "user_id": uid,
+                    "user": {"name": name, "email": email, "is_admin": bool(is_admin)}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[login] 未捕获异常: {type(e).__name__}: {e}")
+        raise HTTPException(500, f"登录异常: {type(e).__name__}: {str(e)[:200]}")
 
 
 @app.get("/api/auth/me")
