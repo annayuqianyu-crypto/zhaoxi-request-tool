@@ -36,6 +36,20 @@ def _get_model(api_model: Optional[str] = None) -> str:
     """返回本次请求使用的模型名；未指定则取环境变量默认值。"""
     return (api_model or "").strip() or _DEFAULT_MODEL
 
+def _truncate_history(history: list, max_pairs: int = 6) -> list:
+    """
+    截断对话历史，防止超长上下文导致 Render 30s 超时（HTTP 502）。
+    策略：保留第 1 条消息（初始背景），然后保留最后 max_pairs 轮（每轮=user+assistant）。
+    """
+    if not history:
+        return history
+    max_msgs = max_pairs * 2  # 每轮2条消息
+    if len(history) <= max_msgs + 1:
+        return history
+    # 第0条保留（初始描述背景），其余取最后 max_msgs 条
+    return [history[0]] + history[-max_msgs:]
+
+
 def _clean_mermaid(raw: str) -> str:
     """
     清理 AI 生成的 Mermaid 代码，移除最常见的导致 parse-error 的语法：
@@ -184,11 +198,11 @@ SYSTEM_PROMPT = """你是朝曦金融机构高端客户增值服务平台的资�
 
 ## 访谈方法论
 
-**第一步：场景剧本破冰（方法7）**
+**第一步：场景剧本破冰**
 不要直接问"你要什么功能"，请业务方讲一个真实工作故事：
 "请描述最近您或同事实际遇到的一个具体情境，就像在给我讲故事一样。"
 
-**第二步：结构化深挖（方法1 — 每次只问一个最关键的问题）**
+**第二步：结构化深挖（每次只问一个最关键的问题）**
 根据故事，判断哪个维度最不清晰，逐一追问：
 - 【角色与权限】谁在用？什么职级？权限边界？
 - 【触发条件】什么情况下启动流程？频率？
@@ -200,65 +214,25 @@ SYSTEM_PROMPT = """你是朝曦金融机构高端客户增值服务平台的资�
 - 【合规要求】有哪些监管规定或内部制度必须遵守？
 
 **领域专项追问（自动识别业务领域）：**
-- 税务场景：申报期限、税种、纳税主体、税务机关对接、凭证留存年限、汇算清缴
-- 法律场景：合同类型、审阅层级、印章管控、律师介入时机、诉讼风险分级、文件密级
-- 资本市场：交易品种、风控限额、监管报送（证监会/交易所/AMAC）、估值方式、结算周期
-
-**第三步：双轨实时画板（方法11）**
-每次回复同步更新流程图，让业务方"看着图纠错"而非凭空想象。
-
-## 流程图生成规范
-每次必须输出完整 Mermaid 代码（graph TD），随对话逐步丰富，不要清空已有内容：
-```
-graph TD
-    classDef startEnd fill:#1a365d,stroke:#1a365d,color:#fff,rx:20
-    classDef process fill:#ebf4ff,stroke:#2b6cb0,color:#1a365d
-    classDef decision fill:#fffaf0,stroke:#ed8936,color:#7b341e
-    classDef output fill:#f0fff4,stroke:#38a169,color:#276749
-    classDef warning fill:#fff5f5,stroke:#fc8181,color:#742a2a
-
-    A([开始]):::startEnd --> B[流程步骤]:::process
-    B --> C{判断条件}:::decision
-    C -->|是| D[处理结果]:::output
-    C -->|否| E[异常处理]:::warning
-```
-要求：
-- 中文标签，每个标签不超过12字
-- 使用 subgraph 对阶段分组（如：申请阶段、审批阶段、归档阶段）
-- 决策节点用菱形 {}，开始/结束用圆角 ([])
-
-## 需求清单生成规范
-当某功能已经足够清晰时，将其加入 requirements 数组（结构化对象）：
-{
-  "module": "模块名（如：申请管理）",
-  "feature": "功能名（如：采购申请提交）",
-  "description": "功能详细描述，说明该功能做什么、解决什么问题",
-  "wireframe": "页面布局描述，格式：顶部：...\\n中部：...\\n底部：...",
-  "process": ["步骤1：操作者做什么", "步骤2：系统做什么"],
-  "inputs": ["输入数据项1", "输入数据项2"],
-  "outputs": ["输出结果1", "输出结果2"]
-}
+- 税务场景：申报期限、税种、纳税主体、税务机关对接、凭证留存年限
+- 法律场景：合同类型、审阅层级、印章管控、律师介入时机、诉讼风险分级
+- 资本市场：交易品种、风控限额、监管报送、估值方式、结算周期
 
 ## 追问原则
 1. 每次只问一个问题，绝不连问
 2. 不接受模糊回答：听到"大概""差不多"时追问具体数字或细节
-3. requirements 只记录已确认清楚的需求，模糊的继续追问
-4. completeness 达 80 以上才建议进入总结
-5. 全程使用中文
+3. completeness 达 80 以上才建议进入总结
+4. 全程使用中文
 
-## 严格输出格式（只输出 JSON，不输出任何其他文字）
+## 严格输出格式（只输出 JSON，不要任何其他文字）
 {
   "message": "AI回应文字 + 下一个追问问题",
-  "mermaid": "完整Mermaid代码字符串",
-  "requirements": [ ...结构化需求对象数组... ],
   "stage": "opening 或 exploring 或 drilling 或 summarizing",
   "completeness": 0到100整数
 }"""
 
 OPENING_MESSAGE = {
-    "message": "您好！我是朝曦的业务需求分析助手，熟悉家族财富架构、全球税务规划、资本市场服务、法律咨询和企业治理五大业务体系。\n\n**我的工作方式：** 通过深度访谈把模糊想法变成清晰的IT需求，右侧实时生成业务流程图，需求清单分四个板块展示：需求梳理、线框图、流程图、PRD文档，最终可直接交付IT团队。\n\n**请按以下框架描述您的场景**（能说多少说多少，其余我来追问）：\n\n🏢 **所在部门**：哪个业务条线或岗位会使用这个系统？\n　　（如：税务团队 / 架构师团队 / 资本市场组 / 客服中台）\n😣 **业务痛点**：目前这件事最大的困难或效率瓶颈是什么？\n🎯 **期望解决**：您希望系统能帮您做到什么，达到什么效果？\n📥 **涉及输入**：需要录入或上传哪些信息？数据从哪里来？\n📤 **期望输出**：系统最终要产出什么？发给谁？存在哪里？\n\n您也可以直接上传相关文件（Word/Excel/PPT）或使用 🎤 语音描述，我会帮您提炼需求。",
-    "mermaid": "graph TD\n    classDef startEnd fill:#1a365d,stroke:#1a365d,color:#fff\n    classDef process fill:#ebf4ff,stroke:#2b6cb0,color:#1a365d\n    classDef output fill:#f0fff4,stroke:#38a169,color:#276749\n\n    A([🚀 开始访谈]):::startEnd --> B[描述真实业务场景]:::process\n    B --> C[AI深度追问澄清]:::process\n    C --> D[实时生成流程图]:::process\n    D --> E[积累需求清单]:::process\n    E --> F([导出需求文档]):::startEnd",
-    "requirements": [],
+    "message": "您好！我是朝曦的业务需求分析助手，熟悉家族财富架构、全球税务规划、资本市场服务、法律咨询和企业治理五大业务体系。\n\n**我的工作方式：** 通过深度访谈把模糊想法变成清晰的IT需求，对话结束后点击右侧各板块的「⚡ 生成」按钮，可一键生成需求梳理、流程图、线框图和PRD文档，最终可直接交付IT团队。\n\n**请按以下框架描述您的场景**（能说多少说多少，其余我来追问）：\n\n🏢 **所在部门**：哪个业务条线或岗位会使用这个系统？\n　　（如：税务团队 / 架构师团队 / 资本市场组 / 客服中台）\n😣 **业务痛点**：目前这件事最大的困难或效率瓶颈是什么？\n🎯 **期望解决**：您希望系统能帮您做到什么，达到什么效果？\n📥 **涉及输入**：需要录入或上传哪些信息？数据从哪里来？\n📤 **期望输出**：系统最终要产出什么？发给谁？存在哪里？\n\n您也可以直接上传相关文件（Word/Excel/PPT）或使用 🎤 语音描述，我会帮您提炼需求。",
     "stage": "opening",
     "completeness": 0
 }
@@ -281,6 +255,8 @@ class SaveSessionRequest(BaseModel):
     history: list
     requirements: list
     mermaid: str = ""
+    wireframe_mermaid: str = ""
+    prd_content: str = ""
     completeness: int = 0
 
 class ChatRequest(BaseModel):
@@ -358,21 +334,34 @@ def extract_pptx(content: bytes) -> str:
 
 def parse_ai_response(raw: str) -> dict:
     cleaned = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
-    # 第一次尝试直接解析
+
+    # 第一次：直接解析
     try:
         return json.loads(cleaned)
     except Exception:
         pass
-    # 第二次：把 mermaid 字段里的真实换行替换为 \n，再解析
+
+    # 第二次：修复 JSON 字符串值内部的裸换行符（AI 有时不转义换行）
+    # 用状态机逐字符扫描，只在字符串内部转换 \n / \r
     try:
-        fixed = re.sub(
-            r'("mermaid"\s*:\s*")(.*?)(")',
-            lambda m: m.group(1) + m.group(2).replace('\n', '\\n').replace('\r', '') + m.group(3),
-            cleaned, flags=re.DOTALL
-        )
-        return json.loads(fixed)
+        out, in_str, esc = [], False, False
+        for ch in cleaned:
+            if esc:
+                out.append(ch); esc = False
+            elif ch == '\\':
+                out.append(ch); esc = True
+            elif ch == '"':
+                out.append(ch); in_str = not in_str
+            elif in_str and ch == '\n':
+                out.append('\\n')
+            elif in_str and ch == '\r':
+                out.append('\\r')
+            else:
+                out.append(ch)
+        return json.loads(''.join(out))
     except Exception:
         pass
+
     # 第三次：正则提取最外层 JSON 对象
     match = re.search(r"\{[\s\S]*\}", cleaned)
     if match:
@@ -380,13 +369,19 @@ def parse_ai_response(raw: str) -> dict:
             return json.loads(match.group())
         except Exception:
             pass
-    # 最终 fallback：只提取 message 文字（不泄漏 Mermaid 代码）
+
+    # 最终 fallback：提取 message 字段文本
+    # 用 json.loads 解码（正确处理 \uXXXX 等转义），避免 .decode('unicode_escape') 导致中文乱码
     msg_match = re.search(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', cleaned)
-    fallback_msg = msg_match.group(1).encode().decode('unicode_escape') if msg_match else "AI 正在分析中，请稍候…"
+    if msg_match:
+        try:
+            fallback_msg = json.loads('"' + msg_match.group(1) + '"')
+        except Exception:
+            fallback_msg = msg_match.group(1)
+    else:
+        fallback_msg = "AI 正在分析中，请稍候…"
     return {
         "message": fallback_msg,
-        "mermaid": "graph TD\n    A[业务场景] --> B[待完善]",
-        "requirements": [],
         "stage": "exploring",
         "completeness": 10,
     }
@@ -452,7 +447,11 @@ async def chat(req: ChatRequest,
                x_api_model: Optional[str] = Header(None)):
     client = _get_client(x_api_key, x_api_url)
     model  = _get_model(x_api_model)
-    messages = [{"role": m.role, "content": m.content} for m in req.history]
+    # 截断历史，最多保留最近 4 轮（8条消息）+ 第0条背景消息
+    # 原因：第7轮时 history=12条，max_pairs=6 时 12<=13 不截断 → 仍然超时
+    # 改为 max_pairs=4：第5轮起（history>=10）即开始截断，确保第7轮也被截断
+    truncated = _truncate_history(list(req.history), max_pairs=4)
+    messages = [{"role": m.role, "content": m.content} for m in truncated]
     messages.append({"role": "user", "content": req.message})
 
     try:
@@ -460,6 +459,7 @@ async def chat(req: ChatRequest,
             model=model,
             max_tokens=2048,
             messages=[{"role": "system", "content": SYSTEM_PROMPT}] + messages,
+            timeout=25,
         )
     except Exception as e:
         raise HTTPException(500, f"AI API 错误：{e}")
@@ -536,9 +536,11 @@ async def generate_section(req: GenerateRequest,
                             x_api_model: Optional[str] = Header(None)):
     client = _get_client(x_api_key, x_api_url)
     model  = _get_model(x_api_model)
+    # 截断历史，最多取最后 10 轮（避免生成接口也超时）
+    gen_history = _truncate_history(list(req.history), max_pairs=10)
     history_text = "\n\n".join(
         f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
-        for m in req.history
+        for m in gen_history
     )
 
     if req.type == "flowchart":
@@ -989,19 +991,29 @@ async def save_session(req: SaveSessionRequest, authorization: Optional[str] = H
 
     h_json = json.dumps(req.history,      ensure_ascii=False)
     r_json = json.dumps(req.requirements, ensure_ascii=False)
+    # 将 wireframe_mermaid 和 prd_content 打包进 mermaid 列（避免 schema 变更）
+    if req.wireframe_mermaid or req.prd_content:
+        mermaid_data = json.dumps({
+            "v": 1,
+            "flowchart": req.mermaid,
+            "wireframe": req.wireframe_mermaid,
+            "prd": req.prd_content
+        }, ensure_ascii=False)
+    else:
+        mermaid_data = req.mermaid
 
     existing = _sb("GET", "/rest/v1/sessions",
                    params={"id": f"eq.{sid}", "user_id": f"eq.{user['id']}", "select": "id"})
 
     if existing and isinstance(existing, list):
         _sb("PATCH", "/rest/v1/sessions",
-            data={"history": h_json, "requirements": r_json, "mermaid": req.mermaid,
+            data={"history": h_json, "requirements": r_json, "mermaid": mermaid_data,
                   "completeness": req.completeness, "title": req.title, "updated_at": now},
             params={"id": f"eq.{sid}"})
     else:
         _sb("POST", "/rest/v1/sessions", data={
             "id": sid, "user_id": user["id"], "title": req.title,
-            "history": h_json, "requirements": r_json, "mermaid": req.mermaid,
+            "history": h_json, "requirements": r_json, "mermaid": mermaid_data,
             "completeness": req.completeness, "created_at": now, "updated_at": now
         })
     return {"session_id": sid, "updated_at": now}
@@ -1029,6 +1041,20 @@ async def get_session(session_id: str, authorization: Optional[str] = Header(Non
     d = dict(rows[0])
     d["history"]      = json.loads(d.get("history")      or "[]")
     d["requirements"] = json.loads(d.get("requirements") or "[]")
+    # 解包 mermaid 列中可能存在的 JSON 包（含 wireframeMermaid + prdContent）
+    raw_mermaid = d.get("mermaid") or ""
+    if raw_mermaid.startswith('{"v":1'):
+        try:
+            m = json.loads(raw_mermaid)
+            d["mermaid"]          = m.get("flowchart", "")
+            d["wireframeMermaid"] = m.get("wireframe", "")
+            d["prdContent"]       = m.get("prd", "")
+        except Exception:
+            d["wireframeMermaid"] = ""
+            d["prdContent"]       = ""
+    else:
+        d["wireframeMermaid"] = ""
+        d["prdContent"]       = ""
     return d
 
 
@@ -1095,6 +1121,20 @@ async def admin_get_session(session_id: str, authorization: Optional[str] = Head
     d = dict(rows[0])
     d["history"]      = json.loads(d.get("history")      or "[]")
     d["requirements"] = json.loads(d.get("requirements") or "[]")
+    # 解包 mermaid 列中可能存在的 JSON 包（含 wireframeMermaid + prdContent）
+    raw_mermaid = d.get("mermaid") or ""
+    if raw_mermaid.startswith('{"v":1'):
+        try:
+            m = json.loads(raw_mermaid)
+            d["mermaid"]          = m.get("flowchart", "")
+            d["wireframeMermaid"] = m.get("wireframe", "")
+            d["prdContent"]       = m.get("prd", "")
+        except Exception:
+            d["wireframeMermaid"] = ""
+            d["prdContent"]       = ""
+    else:
+        d["wireframeMermaid"] = ""
+        d["prdContent"]       = ""
     return d
 
 

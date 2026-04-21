@@ -986,10 +986,9 @@
             <div style="margin-top:2px;padding:10px 14px;background:#fffbeb;border:1px solid #fbd38d;border-radius:8px;font-size:13px;color:#92400e;line-height:1.75;">
               💡 <strong>推荐生成顺序：</strong><br>
               ① 点击「📝 需求梳理」→ 右上角「⚡ 生成」，提取结构化需求清单<br>
-              ② 点击「📊 流程图」→「⚡ 生成」，生成业务流程图<br>
-              ③ 点击「📐 线框图」→「⚡ 生成」，生成功能流程设计图<br>
-              ④ 点击「🖥️ 页面展示」→「⚡ 生成」，生成系统界面模拟<br>
-              ⑤ 点击「📄 PRD文档」→「⚡ 生成」，生成完整需求规格说明书
+              ② 点击「📐 线框图」→「⚡ 生成」，生成功能流程设计图<br>
+              ③ 点击「🖥️ 页面展示」→「⚡ 生成」，生成系统界面模拟<br>
+              ④ 点击「📄 PRD文档」→「⚡ 生成」，生成完整需求规格说明书
             </div>
           </div>
         </div>
@@ -1103,7 +1102,6 @@
       <!-- Sub-tab navigation -->
       <div class="req-subnav">
         <button class="req-subbtn active" onclick="switchReqSub('summary',this)">📝 需求梳理</button>
-        <button class="req-subbtn" onclick="switchReqSub('flowchart',this)">📊 流程图</button>
         <button class="req-subbtn" onclick="switchReqSub('wireframe',this)">📐 线框图</button>
         <button class="req-subbtn" onclick="switchReqSub('preview',this)">🖥️ 页面展示</button>
         <button class="req-subbtn" onclick="switchReqSub('prd',this)">📄 PRD文档</button>
@@ -1129,31 +1127,6 @@
         <div class="gen-content-wrap">
           <div id="summary-list">
             <div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求<br><span style="font-size:12px;color:#cbd5e0">对话进行中也可随时生成</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 📊 业务流程图 -->
-      <div id="req-sub-flowchart" class="req-sub">
-        <div class="gen-header">
-          <div class="gen-header-left">
-            <span class="gen-icon">📊</span>
-            <div>
-              <div class="gen-title">业务流程图</div>
-              <div class="gen-subtitle">基于访谈内容生成完整业务流程图，包含角色、判断节点与异常处理</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <div class="export-btn-group">
-              <button class="exp-btn" onclick="exportFlowchartPNG()" title="导出PNG图片">📷 图片</button>
-              <button class="exp-btn" onclick="exportFlowchartMermaid()" title="导出Mermaid代码">📝 代码</button>
-            </div>
-            <button class="gen-btn" id="gen-flowchart-btn" onclick="generateSection('flowchart')">⚡ 生成</button>
-          </div>
-        </div>
-        <div class="gen-content-wrap" style="padding:12px;">
-          <div id="req-flow-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;overflow:auto;">
-            <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将根据访谈内容生成完整的业务流程图</div>
           </div>
         </div>
       </div>
@@ -1518,9 +1491,7 @@ mermaid.initialize({
 
 // 本地开场白（与后端 OPENING_MESSAGE 保持一致，无需网络即可立刻初始化）
 const LOCAL_OPENING = {
-  message: '您好！我是朝曦的业务需求分析助手，熟悉家族财富架构、全球税务规划、资本市场服务、法律咨询和企业治理五大业务体系。\n\n**我的工作方式：** 通过深度访谈把模糊想法变成清晰的IT需求，右侧实时生成业务流程图，需求清单分四个板块展示：需求梳理、线框图、流程图、PRD文档，最终可直接交付IT团队。\n\n**请按以下框架描述您的场景**（能说多少说多少，其余我来追问）：\n\n🏢 **所在部门**：哪个业务条线或岗位会使用这个系统？\n　　（如：税务团队 / 架构师团队 / 资本市场组 / 客服中台）\n😣 **业务痛点**：目前这件事最大的困难或效率瓶颈是什么？\n🎯 **期望解决**：您希望系统能帮您做到什么，达到什么效果？\n📥 **涉及输入**：需要录入或上传哪些信息？数据从哪里来？\n📤 **期望输出**：系统最终要产出什么？发给谁？存在哪里？\n\n您也可以直接上传相关文件（Word/Excel/PPT）或使用 🎤 语音描述，我会帮您提炼需求。',
-  mermaid: 'graph TD\n    classDef startEnd fill:#1a365d,stroke:#1a365d,color:#fff\n    classDef process fill:#ebf4ff,stroke:#2b6cb0,color:#1a365d\n    classDef output fill:#f0fff4,stroke:#38a169,color:#276749\n\n    A([🚀 开始访谈]):::startEnd --> B[描述真实业务场景]:::process\n    B --> C[AI深度追问澄清]:::process\n    C --> D[实时生成流程图]:::process\n    D --> E[积累需求清单]:::process\n    E --> F([导出需求文档]):::startEnd',
-  requirements: [],
+  message: '您好！我是朝曦的业务需求分析助手，熟悉家族财富架构、全球税务规划、资本市场服务、法律咨询和企业治理五大业务体系。\n\n**我的工作方式：** 通过深度访谈把模糊想法变成清晰的IT需求，对话结束后点击右侧各板块的「⚡ 生成」按钮，可一键生成需求梳理、流程图、线框图和PRD文档，最终可直接交付IT团队。\n\n**请按以下框架描述您的场景**（能说多少说多少，其余我来追问）：\n\n🏢 **所在部门**：哪个业务条线或岗位会使用这个系统？\n　　（如：税务团队 / 架构师团队 / 资本市场组 / 客服中台）\n😣 **业务痛点**：目前这件事最大的困难或效率瓶颈是什么？\n🎯 **期望解决**：您希望系统能帮您做到什么，达到什么效果？\n📥 **涉及输入**：需要录入或上传哪些信息？数据从哪里来？\n📤 **期望输出**：系统最终要产出什么？发给谁？存在哪里？\n\n您也可以直接上传相关文件（Word/Excel/PPT）或使用 🎤 语音描述，我会帮您提炼需求。',
   stage: 'opening',
   completeness: 0
 };
@@ -1575,52 +1546,19 @@ async function sendMessage() {
 function applyAIResponse(data, addToHistory) {
   removeTyping();
   let msg = data.message || '';
-  // 防止 AI 把 Mermaid 代码或原始 JSON 泄漏到聊天气泡
+  // 防止万一 AI 输出了 JSON/代码泄漏到气泡
   if (/^\s*(\{|\[|graph\s+(TD|LR|BT|RL)|sequenceDiagram|classDiagram)/.test(msg)) {
-    msg = '（分析已更新，请查看右侧流程图面板）';
+    msg = '（分析处理中，请稍候…）';
   }
   addMessage('ai', msg);
+  // 只将纯对话文本存入历史记录，不存 mermaid/requirements（按需生成）
   if (addToHistory) history.push({ role: 'assistant', content: msg });
-
-  // ── 流程图（只更新右侧"访谈流程"Tab，不在聊天区显示）──
-  if (data.mermaid) currentMermaid = data.mermaid;
-  if (currentMermaid) {
-    renderMainDiagram(currentMermaid);   // 每次都更新，不锁定
-    if (addToHistory) {
-      flashTab('diagram');
-      showToast('📊 流程图已更新');
-    }
-  }
-
-  // ── 需求清单：累积并每次刷新所有板块 ──
-  const prevCount = currentRequirements.length;
-  if (Array.isArray(data.requirements) && data.requirements.length > 0) {
-    currentRequirements = data.requirements;
-  }
-  if (currentRequirements.length > 0) {
-    renderRequirements(currentRequirements);
-    if (addToHistory) {
-      if (currentRequirements.length > prevCount) {
-        const added = currentRequirements.length - prevCount;
-        flashTab('req');
-        // 首次有需求时自动切换到需求清单
-        if (prevCount === 0) switchTabById('requirements');
-        showToast(`✅ 已新增 ${added} 条需求`);
-        markPRDStale();
-      } else {
-        // 需求未增加，只轻微闪烁
-        flashTab('req');
-      }
-    }
-  }
 
   if (typeof data.completeness === 'number') setCompleteness(data.completeness);
   if (data.stage) {
     updateStage(data.stage);
-    updateQuickChips(data.stage); // 手机端快捷回复卡片跟随阶段更新
+    updateQuickChips(data.stage);
   }
-  // 更新手机端需求角标
-  updateMobileReqBadge(currentRequirements.length);
   // 每次对话后自动暂存
   if (addToHistory) autoSave();
 }
@@ -2255,8 +2193,8 @@ function mockCellValue(col, row) {
 // ── 通用生成按钮逻辑 ──
 function setGenBtnState(type, state) {
   // state: 'idle' | 'loading' | 'done'
-  const ids = { summary:'gen-summary-btn', wireframe:'gen-wireframe-btn', preview:'gen-preview-btn', flowchart:'gen-flowchart-btn', prd:'gen-prd-btn' };
-  const labels = { summary:'⚡ 生成', wireframe:'⚡ 生成', preview:'⚡ 生成', flowchart:'⚡ 生成', prd:'⚡ 生成' };
+  const ids = { summary:'gen-summary-btn', wireframe:'gen-wireframe-btn', preview:'gen-preview-btn', prd:'gen-prd-btn' };
+  const labels = { summary:'⚡ 生成', wireframe:'⚡ 生成', preview:'⚡ 生成', prd:'⚡ 生成' };
   const btn = document.getElementById(ids[type]);
   if (!btn) return;
   if (state === 'loading') { btn.textContent = '生成中…'; btn.disabled = true; btn.classList.remove('has-content'); }
@@ -2293,8 +2231,7 @@ async function generateSection(type) {
       if (type === 'summary') {
         renderSummaryOnly(data.requirements);
         setGenBtnState(type, 'done');
-        showToast(`📝 已提取 ${data.requirements.length} 条需求，正在同步生成流程图…`);
-        generateSection('flowchart');
+        showToast(`📝 已提取 ${data.requirements.length} 条需求`);
       } else if (type === 'preview') {
         renderRequirementsPreview(data.requirements);
         setGenBtnState(type, 'done');
@@ -2304,7 +2241,7 @@ async function generateSection(type) {
       updateMobileReqBadge(currentRequirements.length);
     } else {
       setGenBtnState(type, 'idle');
-      alert('生成内容为空，请继续对话后再试');
+      // 内容为空时静默处理，不弹窗打断用户
     }
   } catch(e) {
     setGenBtnState(type, 'idle');
@@ -3192,10 +3129,49 @@ function saveCurrentSessionAs() {
   saveCurrentSession(name.trim() || autoSessionName());
 }
 
-function loadSession(id) {
-  const sessions = getSessions();
-  const session = sessions.find(s => s.id === id);
-  if (!session) return;
+async function loadSession(id) {
+  let session = null;
+
+  // 已登录时优先从服务端拉取完整内容（云端优先，确保多设备同步）
+  if (userToken) {
+    try {
+      showToast('📂 加载中…');
+      const resp = await fetch(`/api/sessions/${id}`, {
+        headers: { 'Authorization': 'Bearer ' + userToken }
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        session = {
+          id: d.id,
+          name: d.title || '云端会话',
+          savedAt: d.updated_at,
+          history: d.history || [],
+          requirements: d.requirements || [],
+          mermaid: d.mermaid || '',
+          wireframeMermaid: d.wireframeMermaid || '',
+          prdContent: d.prdContent || '',
+          completeness: d.completeness || 0,
+          fromServer: true
+        };
+        // 用完整内容更新本地缓存
+        const local = getSessions();
+        const idx = local.findIndex(s => s.id === id);
+        if (idx >= 0) local[idx] = { ...local[idx], ...session };
+        else local.unshift(session);
+        saveSessions(local);
+      }
+    } catch (e) {
+      console.warn('[loadSession] 服务端拉取失败，降级到本地缓存', e);
+    }
+  }
+
+  // 降级：从本地缓存读取
+  if (!session) {
+    const sessions = getSessions();
+    session = sessions.find(s => s.id === id);
+  }
+
+  if (!session) { showToast('⚠️ 会话数据不存在'); return; }
 
   // ① 先保存当前会话（如有内容）
   if (history.length) autoSave();
@@ -3209,13 +3185,12 @@ function loadSession(id) {
   setCompleteness(session.completeness || 0);
 
   // ③ 重置所有生成按钮
-  ['summary', 'wireframe', 'preview', 'flowchart', 'prd'].forEach(t => setGenBtnState(t, 'idle'));
+  ['summary', 'wireframe', 'preview', 'prd'].forEach(t => setGenBtnState(t, 'idle'));
 
   // ④ 清空并重置各内容区
   const _el = id => document.getElementById(id);
   const summaryList    = _el('summary-list');
   const wireframeWrap  = _el('wireframe-diagram-wrap');
-  const flowWrap       = _el('req-flow-wrap');
   const previewList    = _el('preview-list');
   const prdBox         = _el('prd-result-box');
   const prdTip         = _el('prd-empty-tip');
@@ -3223,7 +3198,6 @@ function loadSession(id) {
 
   if (summaryList)   summaryList.innerHTML   = '<div class="req-empty">历史需求恢复中…</div>';
   if (wireframeWrap) wireframeWrap.innerHTML = '<div class="diagram-placeholder">历史线框图恢复中…</div>';
-  if (flowWrap)      flowWrap.innerHTML      = '<div class="diagram-placeholder">历史流程图恢复中…</div>';
   if (previewList)   previewList.innerHTML   = '<div class="req-empty">历史页面展示恢复中…</div>';
   if (prdBox)  prdBox.style.display  = 'none';
   if (prdTip)  prdTip.style.display  = 'block';
@@ -3244,14 +3218,7 @@ function loadSession(id) {
     if (summaryList) summaryList.innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求</div>';
   }
 
-  // ⑦ 恢复业务流程图（异步渲染）
-  if (currentMermaid) {
-    renderFlowchartSection(currentMermaid).then(() => setGenBtnState('flowchart', 'done')).catch(() => {});
-  } else {
-    if (flowWrap) flowWrap.innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮生成流程图</div>';
-  }
-
-  // ⑧ 恢复功能流程设计图（线框图，异步渲染）
+  // ⑦ 恢复功能流程设计图（线框图，异步渲染）
   if (currentWireframeMermaid) {
     renderWireframeDiagram(currentWireframeMermaid).then(() => setGenBtnState('wireframe', 'done')).catch(() => {});
   } else {
@@ -3311,13 +3278,12 @@ function newSession() {
   document.getElementById('summary-list').innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求</div>';
   document.getElementById('wireframe-diagram-wrap').innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成功能流程设计图</div>';
   document.getElementById('preview-list').innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>每个功能以仿真浏览器界面展示</div>';
-  document.getElementById('req-flow-wrap').innerHTML = '<div class="diagram-placeholder">点击「需求梳理」的「⚡ 生成」后自动同步</div>';
   document.getElementById('prd-result-box').style.display = 'none';
   document.getElementById('prd-empty-tip').style.display = 'block';
   document.getElementById('req-count').textContent = '0';
   updateCurrentSessionLabel('');
   // 重置各生成按钮
-  ['summary','wireframe','preview','flowchart','prd'].forEach(t => setGenBtnState(t, 'idle'));
+  ['summary','wireframe','preview','prd'].forEach(t => setGenBtnState(t, 'idle'));
   // 重新加载开场白
   fetch('/api/init').then(r => r.json()).then(data => applyAIResponse(data, false)).catch(() => {});
   showDesktopOpener();
@@ -3325,9 +3291,18 @@ function newSession() {
   showToast('➕ 新任务已开始');
 }
 
-function deleteSession(id, e) {
+async function deleteSession(id, e) {
   e.stopPropagation();
   if (!confirm('确认删除此会话？删除后无法恢复。')) return;
+  // 同步删除云端（登录用户）
+  if (userToken) {
+    try {
+      await fetch(`/api/sessions/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + userToken }
+      });
+    } catch {}
+  }
   const sessions = getSessions().filter(s => s.id !== id);
   saveSessions(sessions);
   if (currentSessionId === id) { currentSessionId = null; updateCurrentSessionLabel(''); }
@@ -3861,19 +3836,30 @@ async function syncServerSessions() {
     if (!resp.ok) return;
     const data = await resp.json();
     const local = getSessions();
-    const localIds = new Set(local.map(s => s.id));
-    const remotes = (data.sessions || [])
-      .filter(s => !localIds.has(s.id))
-      .map(s => ({
+    const localMap = new Map(local.map(s => [s.id, s]));
+    let newCount = 0;
+    for (const s of (data.sessions || [])) {
+      const serverEntry = {
         id: s.id, name: s.title || '云端会话', savedAt: s.updated_at,
-        history: s.history || [], requirements: s.requirements || [],
-        mermaid: s.mermaid || '', completeness: s.completeness || 0, fromServer: true
-      }));
-    if (remotes.length) {
-      saveSessions([...local, ...remotes]);
-      if (document.getElementById('sessions-modal').classList.contains('open')) renderSessionsList();
-      showToast('☁️ 已同步 ' + remotes.length + ' 条云端记录');
+        completeness: s.completeness || 0, fromServer: true,
+        // 内容为空壳，点击时懒加载
+        history: [], requirements: [], mermaid: '', wireframeMermaid: '', prdContent: ''
+      };
+      if (!localMap.has(s.id)) {
+        local.unshift(serverEntry);
+        newCount++;
+      } else {
+        // 更新元数据（名称、时间、完成度），但不覆盖本地已有的完整内容
+        const existing = localMap.get(s.id);
+        existing.name = s.title || existing.name;
+        existing.savedAt = s.updated_at;
+        existing.completeness = s.completeness || existing.completeness;
+        existing.fromServer = true;
+      }
     }
+    saveSessions(local);
+    if (document.getElementById('sessions-modal').classList.contains('open')) renderSessionsList();
+    if (newCount > 0) showToast('☁️ 已同步 ' + newCount + ' 条新云端记录');
   } catch {}
 }
 
@@ -3886,7 +3872,10 @@ async function saveToServer(session) {
       body: JSON.stringify({
         session_id: session.id, title: session.name,
         history: session.history, requirements: session.requirements,
-        mermaid: session.mermaid, completeness: session.completeness
+        mermaid: session.mermaid,
+        wireframe_mermaid: session.wireframeMermaid || '',
+        prd_content: session.prdContent || '',
+        completeness: session.completeness
       })
     });
   } catch {}
