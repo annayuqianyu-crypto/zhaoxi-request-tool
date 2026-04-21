@@ -1532,15 +1532,77 @@ async function sendMessage() {
       headers: getApiHeaders(),
       body: JSON.stringify({ history: history.slice(0, -1), message: fullContent })
     });
-    await _checkResp(resp);
-    const data = await resp.json();
+
+    // 非 2xx：读取错误详情后抛出（未进入流）
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try { const d = await resp.json(); msg = d.detail || d.message || msg; } catch {}
+      throw new Error(msg);
+    }
+
+    // 流式读取：逐块累积，直到 data: [DONE] 或 data: [ERR]...
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let accumulated = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      accumulated += chunk;
+      // 收到结束/错误标志则提前退出
+      if (accumulated.includes('data: [DONE]') || accumulated.includes('data: [ERR]')) break;
+    }
+    accumulated += decoder.decode(); // flush 最后一块
+
+    // 检测流内错误标志
+    const errMatch = accumulated.match(/data: \[ERR\](\{.*\})/s);
+    if (errMatch) {
+      try { throw new Error(JSON.parse(errMatch[1]).__stream_error__ || '未知错误'); }
+      catch(pe) { throw pe.message ? pe : new Error(errMatch[1]); }
+    }
+
+    // 去掉尾部的流结束标志，得到纯 AI 输出文本
+    const rawText = accumulated.replace(/\n\ndata: \[DONE\].*$/s, '').trim();
+
+    // 复用后端同款 JSON 解析逻辑（三次尝试 + fallback）
+    const data = _parseAIText(rawText);
     applyAIResponse(data, true);
+
   } catch(e) {
     removeTyping();
     addMessage('ai', '⚠️ 请求失败：' + e.message);
   } finally {
     setLoading(false);
   }
+}
+
+/** 前端版 parse_ai_response：与后端逻辑保持一致 */
+function _parseAIText(raw) {
+  const cleaned = raw.replace(/```(?:json)?\s*/g, '').replace(/```/g, '').trim();
+  // 第一次：直接解析
+  try { return JSON.parse(cleaned); } catch {}
+  // 第二次：修复字符串内裸换行符（状态机）
+  try {
+    let out = '', inStr = false, esc = false;
+    for (const ch of cleaned) {
+      if (esc)            { out += ch; esc = false; }
+      else if (ch==='\\') { out += ch; esc = true; }
+      else if (ch==='"')  { out += ch; inStr = !inStr; }
+      else if (inStr && ch==='\n') { out += '\\n'; }
+      else if (inStr && ch==='\r') { out += '\\r'; }
+      else                { out += ch; }
+    }
+    return JSON.parse(out);
+  } catch {}
+  // 第三次：提取最外层 {}
+  const m = cleaned.match(/\{[\s\S]*\}/);
+  if (m) try { return JSON.parse(m[0]); } catch {}
+  // Fallback：提取 message 字段
+  const mm = cleaned.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  let msg = mm ? mm[1] : raw;
+  try { msg = JSON.parse('"' + mm[1] + '"'); } catch {}
+  return { message: msg, stage: 'exploring', completeness: 10 };
 }
 
 function applyAIResponse(data, addToHistory) {

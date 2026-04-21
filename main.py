@@ -10,9 +10,9 @@ from typing import List, Union, Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Response, Header
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,12 +25,20 @@ _DEFAULT_API_URL = os.environ.get("WOLFAI_API_URL", "https://wolfai.top/v1")
 _DEFAULT_MODEL   = os.environ.get("WOLFAI_MODEL",   "gpt-4o")
 
 def _get_client(api_key: Optional[str] = None, api_url: Optional[str] = None) -> OpenAI:
-    """根据请求头中的 key/url 创建 OpenAI 客户端；未提供则使用环境变量默认值。"""
+    """根据请求头中的 key/url 创建同步 OpenAI 客户端；未提供则使用环境变量默认值。"""
     key = (api_key or "").strip() or _DEFAULT_API_KEY
     url = (api_url or "").strip() or _DEFAULT_API_URL
     if not key:
         raise HTTPException(400, "未配置 API Key，请在页面右上角「⚙ API设置」中填写")
     return OpenAI(api_key=key, base_url=url)
+
+def _get_async_client(api_key: Optional[str] = None, api_url: Optional[str] = None) -> AsyncOpenAI:
+    """创建异步 OpenAI 客户端，用于流式响应。"""
+    key = (api_key or "").strip() or _DEFAULT_API_KEY
+    url = (api_url or "").strip() or _DEFAULT_API_URL
+    if not key:
+        raise HTTPException(400, "未配置 API Key，请在页面右上角「⚙ API设置」中填写")
+    return AsyncOpenAI(api_key=key, base_url=url)
 
 def _get_model(api_model: Optional[str] = None) -> str:
     """返回本次请求使用的模型名；未指定则取环境变量默认值。"""
@@ -445,26 +453,47 @@ async def chat(req: ChatRequest,
                x_api_key: Optional[str] = Header(None),
                x_api_url: Optional[str] = Header(None),
                x_api_model: Optional[str] = Header(None)):
-    client = _get_client(x_api_key, x_api_url)
-    model  = _get_model(x_api_model)
-    # 截断历史，最多保留最近 4 轮（8条消息）+ 第0条背景消息
-    # 原因：第7轮时 history=12条，max_pairs=6 时 12<=13 不截断 → 仍然超时
-    # 改为 max_pairs=4：第5轮起（history>=10）即开始截断，确保第7轮也被截断
+    """
+    流式对话接口：逐 token 推送 AI 输出，彻底绕开 Render 30s HTTP 超时限制。
+    前端收到 data: [DONE] 后将累积文本解析为 JSON。
+    支持永续对话，不限轮次。
+    """
+    try:
+        client = _get_async_client(x_api_key, x_api_url)
+    except HTTPException:
+        raise
+    model = _get_model(x_api_model)
+
+    # 保留第0条（初始背景）+ 最近4轮，控制 token 量
     truncated = _truncate_history(list(req.history), max_pairs=4)
-    messages = [{"role": m.role, "content": m.content} for m in truncated]
+    messages  = [{"role": m.role, "content": m.content} for m in truncated]
     messages.append({"role": "user", "content": req.message})
 
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=2048,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}] + messages,
-            timeout=25,
-        )
-    except Exception as e:
-        raise HTTPException(500, f"AI API 错误：{e}")
+    async def generate():
+        try:
+            stream = await client.chat.completions.create(
+                model=model,
+                max_tokens=2048,
+                messages=[{"role": "system", "content": SYSTEM_PROMPT}] + messages,
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content or ""
+                if delta:
+                    # 逐块推送原始 token，前端累积后统一解析
+                    yield delta.encode("utf-8")
+            # 流结束标志
+            yield b"\n\ndata: [DONE]"
+        except Exception as e:
+            # 将错误嵌入流末尾，前端检测后显示友好报错
+            err = json.dumps({"__stream_error__": str(e)}, ensure_ascii=False)
+            yield f"\n\ndata: [ERR]{err}".encode("utf-8")
 
-    return parse_ai_response(response.choices[0].message.content)
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain; charset=utf-8",
+        headers={"X-Accel-Buffering": "no"},  # 禁用 Nginx/Render 的响应缓冲，确保实时推送
+    )
 
 
 @app.post("/api/export")
