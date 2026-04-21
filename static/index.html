@@ -972,6 +972,7 @@
             <div class="export-btn-group">
               <button class="exp-btn" onclick="exportPreviewImage()" title="导出页面截图">📷 图片</button>
               <button class="exp-btn" onclick="exportPreviewText()" title="导出文本说明">📄 文本</button>
+              <button class="exp-btn" onclick="exportPreviewCode()" title="导出可运行的HTML原型代码">📝 代码</button>
             </div>
             <button class="gen-btn" id="gen-preview-btn" onclick="generateSection('preview')">⚡ 生成</button>
           </div>
@@ -2571,7 +2572,7 @@ function exportFlowchartMermaid() {
 function exportWireframePNG() { exportSVGasPNG('wireframe-diagram-wrap', '功能流程设计图.png').catch(e => alert(e.message)); }
 function exportWireframeMermaid() {
   if (!currentWireframeMermaid) { alert('请先生成功能流程设计图'); return; }
-  downloadText(currentWireframeMermaid, '功能流程设计图.mmd');
+  downloadText(currentWireframeMermaid, '功能流程设计图.txt');
   showToast('📝 Mermaid代码已下载');
 }
 
@@ -2635,6 +2636,53 @@ function exportPreviewText() {
   if (!count) { alert('暂无包含布局说明的需求，请先生成线框图再导出'); return; }
   downloadText(text, '页面展示说明.txt');
   showToast('📄 文本说明已下载');
+}
+
+// 导出页面展示原型为独立可运行 HTML 文件
+function exportPreviewCode() {
+  const list = document.getElementById('preview-list');
+  if (!list || !list.querySelector('.page-mock-wrap')) {
+    alert('请先生成页面展示内容'); return;
+  }
+  // 从当前文档的 <style> 块中提取 pm-* / page-mock 相关 CSS 规则
+  let extractedCSS = '';
+  try {
+    Array.from(document.styleSheets).forEach(sheet => {
+      try {
+        Array.from(sheet.cssRules).forEach(rule => {
+          const t = rule.cssText || '';
+          if (t.includes('.pm-') || t.includes('.page-mock') || t.includes(':root')) {
+            extractedCSS += t + '\n';
+          }
+        });
+      } catch {}
+    });
+  } catch {}
+
+  const now = new Date().toLocaleString('zh-CN');
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>页面模拟展示 — 朝曦需求打磨工作台</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f7f8fa; color: #2d3748; }
+    h1 { font-size: 15px; color: #1a365d; margin: 0 0 4px; }
+    .export-meta { font-size: 12px; color: #a0aec0; margin-bottom: 20px; }
+    ${extractedCSS}
+  </style>
+</head>
+<body>
+  <h1>📋 页面模拟展示原型</h1>
+  <div class="export-meta">由朝曦需求打磨工作台生成 · ${now}</div>
+  ${list.innerHTML}
+</body>
+</html>`;
+
+  downloadText(html, '页面展示原型.html');
+  showToast('📝 HTML原型代码已下载');
 }
 
 // ── PRD Word 导出 ──
