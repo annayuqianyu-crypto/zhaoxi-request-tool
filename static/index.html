@@ -1840,10 +1840,9 @@ function setCompleteness(pct) {
 // ── Diagram ──
 let diagCounter = 0;
 
-// 渲染到右侧"访谈流程"Tab，每次对话都更新
-async function renderMainDiagram(code) {
-  diagCounter++;
-  await renderMermaidInto('diagram-wrap', 'mmd-main-'+diagCounter, code, diagramScale);
+// "操作指引"Tab 中 diagram-wrap 已隐藏，不再渲染；currentMermaid 由调用方维护
+async function renderMainDiagram(_code) {
+  // no-op：容器 display:none，渲染会把错误输出到 document.body，故跳过
 }
 
 // 渲染到需求清单 > 流程图 子Tab（#req-flow-wrap），与访谈流程互相独立
@@ -1906,9 +1905,11 @@ function fitMobileSvg(wrap, s) {
 
 async function renderMermaidInto(wrapId, id, code, scale) {
   const wrap = document.getElementById(wrapId);
-  if (!wrap) return;
+  // 若容器不存在或已隐藏，跳过渲染，防止 mermaid 把错误输出追加到 document.body
+  if (!wrap || wrap.style.display === 'none') return;
   try {
-    const { svg } = await mermaid.render(id, code);
+    // 第三个参数 wrap：让 mermaid 在指定容器内完成渲染，错误也限定在容器内，不污染页面其他位置
+    const { svg } = await mermaid.render(id, code, wrap);
     wrap.innerHTML = svg;
     const s = wrap.querySelector('svg');
     if (s) {
@@ -2330,7 +2331,7 @@ async function renderWireframeDiagram(code) {
   const wrap = document.getElementById('wireframe-diagram-wrap');
   if (!wrap) return;
   try {
-    const { svg } = await mermaid.render('mmd-wf-' + diagCounter, code);
+    const { svg } = await mermaid.render('mmd-wf-' + diagCounter, code, wrap);
     wrap.innerHTML = svg;
     const s = wrap.querySelector('svg');
     if (!s) return;
