@@ -36,6 +36,34 @@ def _get_model(api_model: Optional[str] = None) -> str:
     """返回本次请求使用的模型名；未指定则取环境变量默认值。"""
     return (api_model or "").strip() or _DEFAULT_MODEL
 
+def _clean_mermaid(raw: str) -> str:
+    """
+    清理 AI 生成的 Mermaid 代码，移除最常见的导致 parse-error 的语法：
+    1. 代码围栏（```mermaid … ```）
+    2. :::className 行内类名后缀（mermaid v10 解析不稳定）
+    3. 独立的 class 应用行（暂留 classDef 定义行，让颜色仍能生效）
+    4. 删除第一个 graph/flowchart 关键字之前的所有非代码文字行
+    """
+    # 移除 ``` 围栏
+    cleaned = re.sub(r"```(?:mermaid)?\s*", "", raw).replace("```", "").strip()
+
+    lines = cleaned.split("\n")
+    result = []
+    found_graph = False
+    for line in lines:
+        stripped = line.strip()
+        # 跳过 graph/flowchart 之前的非代码行
+        if not found_graph:
+            if re.match(r"^(graph|flowchart)\s+(TD|LR|BT|RL)", stripped, re.IGNORECASE):
+                found_graph = True
+            else:
+                continue
+        # 移除行内 :::className（替换为空）
+        line = re.sub(r":::[\w-]+", "", line)
+        result.append(line)
+
+    return "\n".join(result).strip() if result else cleaned
+
 # ─────────────────────────────────────────────
 # Supabase REST API（走 HTTPS，自动通过系统代理）
 # 彻底替代 psycopg2 直连，解决 TCP/5432 被代理拦截问题
@@ -519,12 +547,20 @@ async def generate_section(req: GenerateRequest,
 访谈记录：
 {history_text}
 
-要求：
-- 使用 graph TD 方向
-- 添加 classDef 样式（startEnd/process/decision/output/warning）
-- 中文标签，每个标签不超过12字
-- 使用 subgraph 对阶段分组
-- 只输出 Mermaid 代码，不要任何其他文字"""
+【严格遵守以下 Mermaid 语法规则，违反任一条均会导致图表无法渲染】：
+1. 第一行必须是：graph TD
+2. 节点 ID 只允许使用英文字母和数字（如 A1、stepB、end1），严禁使用中文、空格或特殊符号作为 ID
+3. 节点标签必须用双引号包裹：A1["中文描述"]；判断节点用花括号：D1{{"是否满足？"}}；开始/结束用圆括号：S(["开始"])
+4. 连线用 --> 或 -->|"说明文字"|
+5. 可以用 subgraph 对阶段分组：subgraph "阶段名称" ... end
+6. 如需节点样式，使用 classDef + class 语句（不要用 :::className 内联写法）：
+   classDef start fill:#d1fae5,stroke:#10b981,color:#065f46
+   classDef proc fill:#dbeafe,stroke:#3b82f6,color:#1e40af
+   classDef dec fill:#fce7f3,stroke:#ec4899,color:#831843
+   class S,E start
+   class A1,B2 proc
+7. 标签内不能出现未转义的英文双引号，用中文标点替代
+8. 只输出 Mermaid 代码，不要任何说明、注释或多余文字"""
         try:
             response = client.chat.completions.create(
                 model=model, max_tokens=2000,
@@ -533,27 +569,35 @@ async def generate_section(req: GenerateRequest,
         except Exception as e:
             raise HTTPException(500, f"生成失败：{e}")
         raw = response.choices[0].message.content
-        cleaned = re.sub(r"```(?:mermaid)?\s*", "", raw).replace("```", "").strip()
+        cleaned = _clean_mermaid(raw)
         return {"type": "flowchart", "mermaid": cleaned, "requirements": []}
 
     elif req.type == "wireframe":
-        prompt = f"""根据以下访谈记录，生成一份 IT 人员使用的功能流程设计图（Mermaid 格式）。
+        prompt = f"""根据以下访谈记录，生成一份供 IT 人员使用的功能流程设计图（Mermaid 格式）。
 
 访谈记录：
 {history_text}
 
-要求：
-- 使用 graph TD 方向（竖向流程，便于上下阅读）
-- 如有多个实现方案或路径，用 subgraph 分别展示（如 subgraph 方案一、subgraph 方案二）
-- 矩形节点表示操作步骤，菱形{{}}表示判断节点，圆角([])表示开始/结束
-- 中文标签，每个标签不超过10字
-- 添加以下 classDef：
-  classDef user fill:#fff3cd,stroke:#f59e0b,color:#92400e
-  classDef system fill:#dbeafe,stroke:#3b82f6,color:#1e40af
-  classDef decision fill:#fce7f3,stroke:#ec4899,color:#831843
-  classDef endpoint fill:#d1fae5,stroke:#10b981,color:#065f46
-- 用户操作节点加 :::user，系统处理节点加 :::system，判断节点加 :::decision，开始/结束加 :::endpoint
-- 只输出 Mermaid 代码，不要任何其他文字"""
+【严格遵守以下 Mermaid 语法规则，违反任一条均会导致图表无法渲染】：
+1. 第一行必须是：graph TD
+2. 节点 ID 只允许使用英文字母和数字（如 U1、S2、D3），严禁使用中文、空格或特殊符号作为 ID
+3. 节点标签必须用双引号包裹：
+   - 操作步骤（矩形）：U1["用户提交申请"]
+   - 判断节点（菱形）：D1{{"审核是否通过？"}}
+   - 开始/结束（圆角）：S(["开始"]) 或 E(["结束"])
+4. 连线用 --> 或 -->|"说明"|
+5. 多方案/多路径用 subgraph 分组：subgraph "方案A" ... end
+6. 使用 classDef + class 语句为节点着色（不要用 :::className 内联写法）：
+   classDef user fill:#fff3cd,stroke:#f59e0b,color:#92400e
+   classDef sys fill:#dbeafe,stroke:#3b82f6,color:#1e40af
+   classDef dec fill:#fce7f3,stroke:#ec4899,color:#831843
+   classDef ep fill:#d1fae5,stroke:#10b981,color:#065f46
+   class U1,U2 user
+   class S1,S2 sys
+   class D1,D2 dec
+   class START,END ep
+7. 标签内不能出现未转义的英文双引号，用中文标点替代
+8. 只输出 Mermaid 代码，不要任何说明、注释或多余文字"""
         try:
             response = client.chat.completions.create(
                 model=model, max_tokens=2500,
@@ -562,7 +606,7 @@ async def generate_section(req: GenerateRequest,
         except Exception as e:
             raise HTTPException(500, f"生成失败：{e}")
         raw = response.choices[0].message.content
-        cleaned = re.sub(r"```(?:mermaid)?\s*", "", raw).replace("```", "").strip()
+        cleaned = _clean_mermaid(raw)
         return {"type": "wireframe", "mermaid": cleaned, "requirements": []}
 
     elif req.type in ("summary", "preview"):

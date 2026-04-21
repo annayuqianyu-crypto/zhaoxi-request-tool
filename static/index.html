@@ -1901,25 +1901,50 @@ function fitMobileSvg(wrap, s) {
   }
 }
 
+// ── Mermaid 客户端安全清洗（移除最常见的 parse-error 来源）──
+function _cleanMermaidCode(code) {
+  if (!code) return code;
+  const lines = code.split('\n');
+  const out = [];
+  let foundGraph = false;
+  for (let line of lines) {
+    const t = line.trim();
+    if (!foundGraph) {
+      if (/^(graph|flowchart)\s+(TD|LR|BT|RL)/i.test(t)) foundGraph = true;
+      else continue;
+    }
+    // 移除行内 :::className（mermaid v10 解析不稳定）
+    line = line.replace(/:::[\w-]+/g, '');
+    out.push(line);
+  }
+  return foundGraph ? out.join('\n').trim() : code.trim();
+}
+
 async function renderMermaidInto(wrapId, id, code, scale) {
   const wrap = document.getElementById(wrapId);
   // 若容器不存在或已隐藏，跳过渲染，防止 mermaid 把错误输出追加到 document.body
   if (!wrap || wrap.style.display === 'none') return;
-  try {
-    // 第三个参数 wrap：让 mermaid 在指定容器内完成渲染，错误也限定在容器内，不污染页面其他位置
-    const { svg } = await mermaid.render(id, code, wrap);
-    wrap.innerHTML = svg;
-    const s = wrap.querySelector('svg');
-    if (s) {
-      if (document.body.classList.contains('mobile-mode')) {
-        fitMobileSvg(wrap, s);
-      } else {
-        s.style.transform = `scale(${scale})`;
-        s.style.transformOrigin = 'top center';
+
+  // 两次尝试：第一次用原始代码，第二次用客户端清洗后的代码
+  const attempts = [code, _cleanMermaidCode(code)];
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      const { svg } = await mermaid.render(id + '_a' + i, attempts[i], wrap);
+      wrap.innerHTML = svg;
+      const s = wrap.querySelector('svg');
+      if (s) {
+        if (document.body.classList.contains('mobile-mode')) {
+          fitMobileSvg(wrap, s);
+        } else {
+          s.style.transform = `scale(${scale})`;
+          s.style.transformOrigin = 'top center';
+        }
       }
+      return; // 成功则退出
+    } catch(e) {
+      if (i < attempts.length - 1) continue; // 继续下一次尝试
+      wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图语法有误，请重新点击「⚡ 生成」</div>';
     }
-  } catch(e) {
-    wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图语法有误，继续对话后将自动修正</div>';
   }
 }
 
@@ -2322,24 +2347,32 @@ async function renderWireframeDiagram(code) {
   diagCounter++;
   const wrap = document.getElementById('wireframe-diagram-wrap');
   if (!wrap) return;
-  try {
-    const { svg } = await mermaid.render('mmd-wf-' + diagCounter, code, wrap);
-    wrap.innerHTML = svg;
-    const s = wrap.querySelector('svg');
-    if (!s) return;
-    if (document.body.classList.contains('mobile-mode')) {
-      fitMobileSvg(wrap, s);
-    } else {
-      const { w, h } = _wfGetNative(s);
-      // 确保 viewBox 存在（导出时需要）
-      if (!s.getAttribute('viewBox')) s.setAttribute('viewBox', `0 0 ${w} ${h}`);
-      wireframeNativeW = w; wireframeNativeH = h;
-      const containerW = wrap.clientWidth || wrap.parentElement?.clientWidth || 800;
-      wireframeScale = w > containerW ? containerW / w : 1;
-      _wfApplySize(s, wrap, wireframeScale);
+
+  // 两次尝试：原始代码 → 客户端清洗后的代码
+  const attempts = [code, _cleanMermaidCode(code)];
+  let rendered = false;
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      const { svg } = await mermaid.render('mmd-wf-' + diagCounter + '_a' + i, attempts[i], wrap);
+      wrap.innerHTML = svg;
+      const s = wrap.querySelector('svg');
+      if (!s) { rendered = false; continue; }
+      if (document.body.classList.contains('mobile-mode')) {
+        fitMobileSvg(wrap, s);
+      } else {
+        const { w, h } = _wfGetNative(s);
+        if (!s.getAttribute('viewBox')) s.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        wireframeNativeW = w; wireframeNativeH = h;
+        const containerW = wrap.clientWidth || wrap.parentElement?.clientWidth || 800;
+        wireframeScale = w > containerW ? containerW / w : 1;
+        _wfApplySize(s, wrap, wireframeScale);
+      }
+      rendered = true;
+      break;
+    } catch(e) {
+      if (i < attempts.length - 1) continue;
+      wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">渲染失败，请重新点击「⚡ 生成」</div>';
     }
-  } catch(e) {
-    wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图渲染失败，AI正在修正中</div>';
   }
 }
 function zoomWireframe(delta) {
