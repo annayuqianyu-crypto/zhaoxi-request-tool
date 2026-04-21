@@ -1266,7 +1266,7 @@ mermaid.initialize({
   theme: 'base',
   themeVariables: {
     primaryColor: '#1a365d',
-    primaryTextColor: '#ffffff',
+    primaryTextColor: '#1a365d',
     primaryBorderColor: '#2b6cb0',
     lineColor: '#4a90d9',
     secondaryColor: '#ebf4ff',
@@ -1612,6 +1612,12 @@ let diagCounter = 0;
 async function renderMainDiagram(code) {
   diagCounter++;
   await renderMermaidInto('diagram-wrap', 'mmd-main-'+diagCounter, code, diagramScale);
+}
+
+// 渲染到需求清单 > 流程图 子Tab（#req-flow-wrap），与访谈流程互相独立
+async function renderFlowchartSection(code) {
+  diagCounter++;
+  await renderMermaidInto('req-flow-wrap', 'mmd-flow-'+diagCounter, code, 1);
 }
 
 // 兼容旧调用
@@ -2021,7 +2027,7 @@ async function generateSection(type) {
 
     if (type === 'flowchart' && data.mermaid) {
       currentMermaid = data.mermaid;
-      await renderConvDiagram(data.mermaid);
+      await renderFlowchartSection(data.mermaid);   // 渲染到需求清单>流程图，不影响访谈流程
       setGenBtnState(type, 'done');
       showToast('🔄 业务流程图已生成');
     } else if (type === 'wireframe' && data.mermaid) {
