@@ -1946,41 +1946,35 @@ function resetReqZoom() {
   if(s) s.style.transform = 'scale(1)';
 }
 
-// ── Requirements Rendering (4 sections) ──
+// ── Requirements Rendering ──
+// 注：线框图（wireframe）已改为独立的 Mermaid 图表，不再在此函数内渲染
 function renderRequirements(list) {
-  document.getElementById('req-count').textContent = list.length;
+  const countEl = document.getElementById('req-count');
+  if (countEl) countEl.textContent = list.length;
   if (!list.length) return;
 
   // Flash badge on requirements tab
   const btn = document.getElementById('tab-req-btn');
-  btn.style.color = '#48bb78';
-  setTimeout(() => btn.style.color = '', 1500);
+  if (btn) { btn.style.color = '#48bb78'; setTimeout(() => btn.style.color = '', 1500); }
 
+  // 需求梳理列表
   const summaryEl = document.getElementById('summary-list');
-  const wireframeEl = document.getElementById('wireframe-list');
-  summaryEl.innerHTML = '';
-  wireframeEl.innerHTML = '';
-
-  let hasWireframe = false;
-
-  list.forEach((req, i) => {
-    if (typeof req === 'string') {
-      const d = document.createElement('div');
-      d.className = 'summary-item';
-      d.innerHTML = `<div class="summary-header"><span class="summary-module">需求</span><span class="summary-feature">${esc(req)}</span></div>`;
-      summaryEl.appendChild(d);
-    } else {
-      renderSummaryItem(summaryEl, req, i);
-      if (req.wireframe) { renderWireframeItem(wireframeEl, req, i); hasWireframe = true; }
-    }
-  });
-
-  // 页面展示
-  renderRequirementsPreview(list);
-
-  if (!hasWireframe) {
-    wireframeEl.innerHTML = '<div class="req-empty">当前已确认需求暂无界面草图<br><span style="font-size:12px;color:#cbd5e0">继续访谈后将逐步生成</span></div>';
+  if (summaryEl) {
+    summaryEl.innerHTML = '';
+    list.forEach((req, i) => {
+      if (typeof req === 'string') {
+        const d = document.createElement('div');
+        d.className = 'summary-item';
+        d.innerHTML = `<div class="summary-header"><span class="summary-module">需求</span><span class="summary-feature">${esc(req)}</span></div>`;
+        summaryEl.appendChild(d);
+      } else {
+        renderSummaryItem(summaryEl, req, i);
+      }
+    });
   }
+
+  // 页面展示（使用带有 wireframe 属性的需求）
+  renderRequirementsPreview(list);
 }
 
 function renderSummaryItem(container, req, i) {
@@ -3121,6 +3115,8 @@ function autoSave() {
     history: [...history],
     requirements: [...currentRequirements],
     mermaid: currentMermaid,
+    wireframeMermaid: currentWireframeMermaid,
+    prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     completeness,
     savedAt: new Date().toISOString()
   };
@@ -3140,6 +3136,8 @@ function saveCurrentSession(customName) {
     history: [...history],
     requirements: [...currentRequirements],
     mermaid: currentMermaid,
+    wireframeMermaid: currentWireframeMermaid,
+    prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     completeness
   };
   if (idx >= 0) sessions[idx] = session;
@@ -3163,22 +3161,102 @@ function loadSession(id) {
   const sessions = getSessions();
   const session = sessions.find(s => s.id === id);
   if (!session) return;
-  // 先自动保存当前（如有内容）
+
+  // ① 先保存当前会话（如有内容）
   if (history.length) autoSave();
-  // 加载目标会话
-  history = session.history || [];
-  currentRequirements = session.requirements || [];
-  currentMermaid = session.mermaid || '';
-  currentSessionId = session.id;
+
+  // ② 恢复全部状态变量
+  history              = [...(session.history || [])];
+  currentRequirements  = [...(session.requirements || [])];
+  currentMermaid       = session.mermaid || '';
+  currentWireframeMermaid = session.wireframeMermaid || '';
+  currentSessionId     = session.id;
   setCompleteness(session.completeness || 0);
-  // 重建聊天记录
+
+  // ③ 重置所有生成按钮
+  ['summary', 'wireframe', 'preview', 'flowchart', 'prd'].forEach(t => setGenBtnState(t, 'idle'));
+
+  // ④ 清空并重置各内容区
+  const _el = id => document.getElementById(id);
+  const summaryList    = _el('summary-list');
+  const wireframeWrap  = _el('wireframe-diagram-wrap');
+  const flowWrap       = _el('req-flow-wrap');
+  const previewList    = _el('preview-list');
+  const prdBox         = _el('prd-result-box');
+  const prdTip         = _el('prd-empty-tip');
+  const prdInline      = _el('prd-inline-content');
+
+  if (summaryList)   summaryList.innerHTML   = '<div class="req-empty">历史需求恢复中…</div>';
+  if (wireframeWrap) wireframeWrap.innerHTML = '<div class="diagram-placeholder">历史线框图恢复中…</div>';
+  if (flowWrap)      flowWrap.innerHTML      = '<div class="diagram-placeholder">历史流程图恢复中…</div>';
+  if (previewList)   previewList.innerHTML   = '<div class="req-empty">历史页面展示恢复中…</div>';
+  if (prdBox)  prdBox.style.display  = 'none';
+  if (prdTip)  prdTip.style.display  = 'block';
+  if (prdInline) prdInline.textContent = '';
+
+  // ⑤ 重建聊天消息气泡
   rebuildChat();
-  // 重新渲染图表和需求
-  if (currentMermaid) renderConvDiagram(currentMermaid);
-  if (currentRequirements.length) renderRequirements(currentRequirements);
+
+  // ⑥ 恢复需求梳理 + 页面展示
+  if (currentRequirements.length) {
+    renderSummaryOnly(currentRequirements);
+    renderRequirementsPreview(currentRequirements);
+    setGenBtnState('summary',  'done');
+    setGenBtnState('preview',  'done');
+    updateMobileReqBadge(currentRequirements.length);
+    if (_el('req-count')) _el('req-count').textContent = currentRequirements.length;
+  } else {
+    if (summaryList) summaryList.innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求</div>';
+  }
+
+  // ⑦ 恢复业务流程图（异步渲染）
+  if (currentMermaid) {
+    renderFlowchartSection(currentMermaid).then(() => setGenBtnState('flowchart', 'done')).catch(() => {});
+  } else {
+    if (flowWrap) flowWrap.innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮生成流程图</div>';
+  }
+
+  // ⑧ 恢复功能流程设计图（线框图，异步渲染）
+  if (currentWireframeMermaid) {
+    renderWireframeDiagram(currentWireframeMermaid).then(() => setGenBtnState('wireframe', 'done')).catch(() => {});
+  } else {
+    if (wireframeWrap) wireframeWrap.innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮生成功能流程设计图</div>';
+  }
+
+  // ⑨ 恢复 PRD 文档
+  const prdContent = session.prdContent || '';
+  if (prdContent && prdInline) {
+    prdInline.textContent = prdContent;
+    if (prdBox) prdBox.style.display = 'block';
+    if (prdTip) prdTip.style.display = 'none';
+    setGenBtnState('prd', 'done');
+  }
+
+  // ⑩ 在聊天区插入上下文对齐提示卡（不加入 history，纯 UI 提示）
+  const savedAt    = session.savedAt
+    ? new Date(session.savedAt).toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})
+    : '未知时间';
+  const userTurns  = history.filter(h => h.role === 'user').length;
+  const reqCount   = currentRequirements.length;
+  const resumeCard = document.createElement('div');
+  resumeCard.style.cssText = [
+    'margin:12px 16px','padding:11px 15px','border-radius:10px',
+    'background:#f0fff4','border:1px solid #9ae6b4',
+    'font-size:12px','color:#276749','line-height:1.75'
+  ].join(';');
+  resumeCard.innerHTML = `
+    <div style="font-weight:700;margin-bottom:4px;">📂 已恢复会话「${esc(session.name)}」</div>
+    <div style="color:#4a5568;">保存于 ${savedAt} &nbsp;·&nbsp; ${userTurns} 轮对话${reqCount ? ' &nbsp;·&nbsp; 已梳理 ' + reqCount + ' 条需求' : ''}</div>
+    <div style="margin-top:5px;color:#276749;">✅ AI 已加载完整对话上下文，您可直接继续之前的访谈，无需重新描述背景</div>`;
+  const messagesEl = document.getElementById('messages');
+  if (messagesEl) { messagesEl.appendChild(resumeCard); scrollBottom(); }
+
+  // ⑪ 有历史需求则切到需求清单，否则保持当前 tab
+  if (currentRequirements.length) switchTabById('requirements');
+
   updateCurrentSessionLabel(session.name);
   hideSessionsPanel();
-  showToast('📂 已切换：' + session.name);
+  showToast('📂 已恢复：' + session.name);
 }
 
 function newSession() {
@@ -3190,6 +3268,7 @@ function newSession() {
   history = [];
   currentRequirements = [];
   currentMermaid = '';
+  currentWireframeMermaid = '';
   currentSessionId = null;
   setCompleteness(0);
   updateStage('opening');
