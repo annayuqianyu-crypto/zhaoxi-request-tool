@@ -168,6 +168,12 @@
     #diagram-wrap { background:white; border:1px solid var(--border); border-radius:12px; padding:20px; min-height:220px; display:flex; align-items:center; justify-content:center; overflow:auto; }
     #diagram-wrap svg { max-width:100%; height:auto; }
     .diagram-placeholder { color:#a0aec0; font-size:13px; text-align:center; line-height:1.8; }
+    /* ── 连接线标签文字强制深色（所有图区通用）── */
+    .edgeLabel foreignObject div,
+    .edgeLabel foreignObject p,
+    .edgeLabel foreignObject span,
+    .edgeLabel .label { color:#2d3748 !important; }
+    svg .edgeLabel text { fill:#2d3748 !important; }
     .diagram-toolbar { display:flex; gap:8px; margin-bottom:10px; }
     .diagram-tool-btn { padding:4px 12px; font-size:12px; background:white; border:1px solid var(--border); border-radius:6px; cursor:pointer; color:#4a5568; transition:all .2s; }
     .diagram-tool-btn:hover { background:var(--blue-light); border-color:var(--blue); color:var(--blue); }
@@ -2069,7 +2075,29 @@ function renderSummaryOnly(list) {
 }
 
 // 线框图（功能流程设计图）专属渲染
+// wireframeNativeW/H 保存 SVG 原始尺寸，用于缩放和导出
 let wireframeScale = 1;
+let wireframeNativeW = 800, wireframeNativeH = 600;
+
+function _wfGetNative(s) {
+  // 从 viewBox 或属性读原始尺寸
+  const vb = s.getAttribute('viewBox');
+  let w = parseFloat(s.getAttribute('width'))  || 800;
+  let h = parseFloat(s.getAttribute('height')) || 600;
+  if (vb) {
+    const p = vb.trim().split(/[\s,]+/);
+    if (p.length >= 4) { w = parseFloat(p[2]) || w; h = parseFloat(p[3]) || h; }
+  }
+  return { w, h };
+}
+function _wfApplySize(s, wrap, scale) {
+  s.style.transform = 'none';               // 不用 CSS transform
+  s.setAttribute('width',  Math.round(wireframeNativeW * scale));
+  s.setAttribute('height', Math.round(wireframeNativeH * scale));
+  s.style.display = 'block';
+  wrap.style.minHeight = Math.max(180, Math.round(wireframeNativeH * scale) + 32) + 'px';
+}
+
 async function renderWireframeDiagram(code) {
   currentWireframeMermaid = code;
   diagCounter++;
@@ -2079,45 +2107,36 @@ async function renderWireframeDiagram(code) {
     const { svg } = await mermaid.render('mmd-wf-' + diagCounter, code);
     wrap.innerHTML = svg;
     const s = wrap.querySelector('svg');
-    if (s) {
-      if (document.body.classList.contains('mobile-mode')) {
-        fitMobileSvg(wrap, s);
-      } else {
-        // 自适应：先按容器宽度缩放显示全貌，用户可再手动缩放
-        const vb = s.getAttribute('viewBox');
-        let svgW = parseFloat(s.getAttribute('width')) || 800;
-        if (vb) { const p = vb.trim().split(/[\s,]+/); svgW = parseFloat(p[2]) || svgW; }
-        const containerW = wrap.clientWidth - 32;
-        wireframeScale = svgW > containerW ? Math.max(0.3, containerW / svgW) : 1;
-        s.style.transformOrigin = 'top left';
-        s.style.transform = `scale(${wireframeScale})`;
-        s.style.display = 'block';
-        // 让容器高度能正确撑开
-        const svgH = parseFloat(s.getAttribute('height')) || (vb ? parseFloat(vb.trim().split(/[\s,]+/)[3]) : 400) || 400;
-        wrap.style.minHeight = Math.max(180, svgH * wireframeScale + 32) + 'px';
-      }
+    if (!s) return;
+    if (document.body.classList.contains('mobile-mode')) {
+      fitMobileSvg(wrap, s);
+    } else {
+      const { w, h } = _wfGetNative(s);
+      // 确保 viewBox 存在（导出时需要）
+      if (!s.getAttribute('viewBox')) s.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      wireframeNativeW = w; wireframeNativeH = h;
+      const containerW = wrap.clientWidth || wrap.parentElement?.clientWidth || 800;
+      wireframeScale = w > containerW ? containerW / w : 1;
+      _wfApplySize(s, wrap, wireframeScale);
     }
   } catch(e) {
     wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图渲染失败，AI正在修正中</div>';
   }
 }
 function zoomWireframe(delta) {
-  wireframeScale = Math.max(0.2, Math.min(3, wireframeScale + delta));
-  const s = document.querySelector('#wireframe-diagram-wrap svg');
-  if (s) { s.style.transform = `scale(${wireframeScale})`; s.style.transformOrigin = 'top left'; }
-}
-function resetWireframeZoom() {
-  // 重置到适应宽度
   const wrap = document.getElementById('wireframe-diagram-wrap');
   const s = wrap ? wrap.querySelector('svg') : null;
   if (!s) return;
-  const vb = s.getAttribute('viewBox');
-  let svgW = parseFloat(s.getAttribute('width')) || 800;
-  if (vb) { const p = vb.trim().split(/[\s,]+/); svgW = parseFloat(p[2]) || svgW; }
-  const containerW = wrap.clientWidth - 32;
-  wireframeScale = svgW > containerW ? Math.max(0.3, containerW / svgW) : 1;
-  s.style.transform = `scale(${wireframeScale})`;
-  s.style.transformOrigin = 'top left';
+  wireframeScale = Math.max(0.2, Math.min(4, wireframeScale + delta));
+  _wfApplySize(s, wrap, wireframeScale);
+}
+function resetWireframeZoom() {
+  const wrap = document.getElementById('wireframe-diagram-wrap');
+  const s = wrap ? wrap.querySelector('svg') : null;
+  if (!s) return;
+  const containerW = wrap.clientWidth || 800;
+  wireframeScale = wireframeNativeW > containerW ? containerW / wireframeNativeW : 1;
+  _wfApplySize(s, wrap, wireframeScale);
 }
 
 // ── 需求Demo 生成 ──
@@ -2490,34 +2509,50 @@ function downloadText(content, filename) {
   downloadBlob(new Blob([content], { type: 'text/plain;charset=utf-8' }), filename);
 }
 
-// SVG → PNG（通用）
+// SVG → PNG（通用）——使用 viewBox 原始尺寸，不受 CSS transform 影响
 async function exportSVGasPNG(wrapId, filename) {
   const wrap = document.getElementById(wrapId);
-  const svg = wrap ? wrap.querySelector('svg') : null;
+  const svg  = wrap ? wrap.querySelector('svg') : null;
   if (!svg) { alert('请先生成图表后再导出'); return; }
-  const bbox = svg.getBoundingClientRect();
-  const W = Math.max(bbox.width, 600), H = Math.max(bbox.height, 400);
+
+  // 读取 SVG 原始尺寸（从 viewBox 优先，fallback 到 width/height 属性）
+  let W = 800, H = 600;
+  const vb = svg.getAttribute('viewBox');
+  if (vb) {
+    const p = vb.trim().split(/[\s,]+/);
+    if (p.length >= 4) { W = parseFloat(p[2]) || W; H = parseFloat(p[3]) || H; }
+  } else {
+    W = parseFloat(svg.getAttribute('width'))  || W;
+    H = parseFloat(svg.getAttribute('height')) || H;
+  }
+  W = Math.max(W, 600); H = Math.max(H, 400);
+
+  // Clone SVG，强制恢复原始尺寸（排除 CSS transform 影响）
   const cloned = svg.cloneNode(true);
-  cloned.setAttribute('width', W); cloned.setAttribute('height', H);
-  // 内联所有样式（确保导出时样式正确）
+  cloned.setAttribute('width', W);
+  cloned.setAttribute('height', H);
+  cloned.style.transform = 'none';
+
   const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(cloned);
-  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
+  const blob   = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url    = URL.createObjectURL(blob);
+
   await new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const scale = 2;
+      const scale = 2;                          // 2× 高清输出
       const canvas = document.createElement('canvas');
-      canvas.width = W * scale; canvas.height = H * scale;
+      canvas.width  = W * scale;
+      canvas.height = H * scale;
       const ctx = canvas.getContext('2d');
       ctx.scale(scale, scale);
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, W, H);
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, W, H);
       URL.revokeObjectURL(url);
       canvas.toBlob(pngBlob => { downloadBlob(pngBlob, filename); resolve(); }, 'image/png');
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG渲染失败')); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG渲染失败，请重试')); };
     img.src = url;
   });
   showToast('📷 图片已下载：' + filename);
