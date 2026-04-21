@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>需求打磨工作台</title>
+  <title>朝曦家办-需求打磨工作台</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
@@ -551,6 +551,15 @@
     .chip-skill-role { background:#ebf8ff; color:#2b6cb0; border:1px solid #90cdf4; }
     .chip-agent-role { background:#faf5ff; color:#6b46c1; border:1px solid #d6bcfa; }
     .def-arch-box { background:#f7fafc; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:12px; color:#4a5568; line-height:1.75; }
+
+    /* ── 需求清单 全局操作按钮 ── */
+    .req-subnav-actions { display:flex; gap:5px; align-items:center; margin-left:auto; flex-shrink:0; }
+    .req-nav-action-btn { padding:5px 12px; font-size:12px; font-weight:600; border:none; border-radius:7px; cursor:pointer; transition:all .2s; white-space:nowrap; }
+    .req-nav-action-btn:disabled { cursor:not-allowed; opacity:.55; }
+    .btn-gen-all { background:var(--navy); color:white; }
+    .btn-gen-all:hover:not(:disabled) { background:#2a4a7f; transform:translateY(-1px); box-shadow:0 3px 8px rgba(26,54,93,.25); }
+    .btn-zip-all { background:#dd6b20; color:white; }
+    .btn-zip-all:hover:not(:disabled) { background:#c05621; transform:translateY(-1px); box-shadow:0 3px 8px rgba(192,86,33,.25); }
   </style>
 </head>
 <body>
@@ -559,7 +568,7 @@
 <div id="device-splash">
   <div class="splash-inner">
     <div class="splash-watermark">朝曦金融高端客户服务平台</div>
-    <div class="splash-brand">需求<span>打磨</span>工作台</div>
+    <div class="splash-brand">朝曦家办 · 需求<span>打磨</span>工作台</div>
     <div class="splash-tagline">AI深度访谈 · 实时流程图 · 一键输出PRD<br>让业务团队无需懂IT，也能清晰表达需求</div>
     <div class="splash-skills">
       <span class="splash-skill">家族财富架构</span>
@@ -587,7 +596,7 @@
 <!-- ── Login Modal ── -->
 <div id="login-modal">
   <div class="login-box">
-    <div class="login-logo">需求<span>打磨</span>工作台</div>
+    <div class="login-logo">朝曦家办 · 需求<span>打磨</span>工作台</div>
     <div class="login-sub">请使用公司邮箱登录<br>您的会话记录将安全保存在云端，支持跨设备查看</div>
     <div class="login-field">
       <label for="login-email">邮箱地址</label>
@@ -606,7 +615,7 @@
 <!-- ── Header ── -->
 <header>
   <div style="display:flex;align-items:center">
-    <div class="logo">需求<span>打磨</span>工作台</div>
+    <div class="logo">朝曦家办 · <span>需求打磨</span>工作台</div>
     <div class="badge">家族财富 · 全球税务 · 资本市场 · 法律咨询 · 企业治理</div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
@@ -879,6 +888,10 @@
         <button class="req-subbtn" onclick="switchReqSub('wireframe',this)">📐 线框图</button>
         <button class="req-subbtn" onclick="switchReqSub('preview',this)">🖥️ 页面展示</button>
         <button class="req-subbtn" onclick="switchReqSub('prd',this)">📄 PRD文档</button>
+        <div class="req-subnav-actions">
+          <button id="btn-gen-all" class="req-nav-action-btn btn-gen-all" onclick="generateAllSections()" title="依次自动生成全部5项需求物料">⚡ 全部生成</button>
+          <button id="btn-zip-all" class="req-nav-action-btn btn-zip-all" onclick="downloadAllZip()" title="将已生成的全部物料打包为ZIP文件下载">📦 打包下载</button>
+        </div>
       </div>
 
       <!-- 📝 需求梳理 -->
@@ -2699,6 +2712,166 @@ async function exportPRDWord() {
     downloadBlob(await resp.blob(), 'PRD需求规格说明书.docx');
     showToast('📥 PRD Word已下载');
   } catch(e) { alert('导出失败：' + e.message); }
+}
+
+// ── SVG → PNG Blob（内部辅助，不直接下载）──
+async function _svgToPngBlob(wrapId) {
+  const wrap = document.getElementById(wrapId);
+  const svg  = wrap ? wrap.querySelector('svg') : null;
+  if (!svg) return null;
+  let W = 800, H = 600;
+  const vb = svg.getAttribute('viewBox');
+  if (vb) {
+    const p = vb.trim().split(/[\s,]+/);
+    if (p.length >= 4) { W = parseFloat(p[2]) || W; H = parseFloat(p[3]) || H; }
+  } else {
+    W = parseFloat(svg.getAttribute('width'))  || W;
+    H = parseFloat(svg.getAttribute('height')) || H;
+  }
+  W = Math.max(W, 600); H = Math.max(H, 400);
+  const cloned = svg.cloneNode(true);
+  cloned.setAttribute('width', W);
+  cloned.setAttribute('height', H);
+  cloned.style.transform = 'none';
+  const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(cloned);
+  const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const sc = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width  = W * sc; canvas.height = H * sc;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(sc, sc);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+      ctx.drawImage(img, 0, 0, W, H);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(b => resolve(b), 'image/png');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+// ── 一键生成全部物料 ──
+async function generateAllSections() {
+  if (!history.length) { alert('请先开始对话，再生成需求内容'); return; }
+  const btn    = document.getElementById('btn-gen-all');
+  const zipBtn = document.getElementById('btn-zip-all');
+  if (btn)    { btn.disabled = true;    btn.textContent = '⏳ 生成中…'; }
+  if (zipBtn) zipBtn.disabled = true;
+  try {
+    showToast('⏳ (1/5) 正在生成需求梳理…');
+    await generateSection('summary');        // 内部会自动触发流程图（非 await）
+    showToast('⏳ (2/5) 正在等待流程图完成…');
+    await new Promise(r => setTimeout(r, 5000));  // 等待内部流程图异步完成
+    showToast('⏳ (3/5) 正在生成功能流程设计图…');
+    await generateSection('wireframe');
+    showToast('⏳ (4/5) 正在生成页面展示…');
+    await generateSection('preview');
+    showToast('⏳ (5/5) 正在生成PRD文档…');
+    await generatePRDInline();
+    showToast('✅ 全部物料已生成完成！可点击「📦 打包下载」一键导出');
+  } catch(e) {
+    showToast('❌ 生成过程出错：' + e.message);
+  } finally {
+    if (btn)    { btn.disabled = false;    btn.textContent = '⚡ 全部生成'; }
+    if (zipBtn) zipBtn.disabled = false;
+  }
+}
+
+// ── 一键打包下载全部物料 (ZIP) ──
+async function downloadAllZip() {
+  if (!currentRequirements.length && !currentMermaid && !currentWireframeMermaid) {
+    alert('暂无已生成的物料，请先点击「⚡ 全部生成」或分别生成各项内容'); return;
+  }
+  // 懒加载 JSZip
+  if (!window.JSZip) {
+    showToast('⏳ 正在加载打包组件…');
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload = res; s.onerror = () => rej(new Error('打包组件加载失败，请检查网络'));
+      document.head.appendChild(s);
+    }).catch(e => { alert(e.message); return Promise.reject(e); });
+  }
+  const btn    = document.getElementById('btn-zip-all');
+  const genBtn = document.getElementById('btn-gen-all');
+  if (btn)    { btn.disabled = true;    btn.textContent = '⏳ 打包中…'; }
+  if (genBtn) genBtn.disabled = true;
+  showToast('⏳ 正在打包全部物料，请稍候…');
+  try {
+    const zip = new window.JSZip();
+    const now = new Date().toLocaleString('zh-CN');
+    let fileCount = 0;
+
+    // 01 需求梳理文本
+    if (currentRequirements.length) {
+      let text = '朝曦家办-需求打磨工作台 · 需求梳理报告\n';
+      text += `生成时间：${now}\n${'═'.repeat(50)}\n\n`;
+      currentRequirements.forEach((req, i) => {
+        if (typeof req === 'object') {
+          text += `【${i+1}】${req.module || '功能'} · ${req.feature || ''}\n${'─'.repeat(35)}\n`;
+          if (req.description) text += `功能说明：${req.description}\n`;
+          if (req.inputs?.length)  text += `输入数据：${req.inputs.join('、')}\n`;
+          if (req.outputs?.length) text += `输出结果：${req.outputs.join('、')}\n`;
+          if (req.process?.length) { text += '操作步骤：\n'; req.process.forEach((s,j) => text += `  ${j+1}. ${s}\n`); }
+          text += '\n';
+        } else { text += `【${i+1}】${req}\n\n`; }
+      });
+      zip.file('01_需求梳理.txt', text); fileCount++;
+    }
+
+    // 02 业务流程图
+    if (currentMermaid) {
+      zip.file('02_业务流程图代码.txt', currentMermaid); fileCount++;
+      const pngBlob = await _svgToPngBlob('req-flow-wrap');
+      if (pngBlob) { zip.file('02_业务流程图.png', pngBlob); fileCount++; }
+    }
+
+    // 03 功能流程设计图（线框图）
+    if (currentWireframeMermaid) {
+      zip.file('03_功能流程设计图代码.txt', currentWireframeMermaid); fileCount++;
+      const pngBlob = await _svgToPngBlob('wireframe-diagram-wrap');
+      if (pngBlob) { zip.file('03_功能流程设计图.png', pngBlob); fileCount++; }
+    }
+
+    // 04 页面展示 HTML 原型
+    const previewList = document.getElementById('preview-list');
+    if (previewList?.querySelector('.page-mock-wrap')) {
+      let css = '';
+      try {
+        Array.from(document.styleSheets).forEach(sheet => {
+          try {
+            Array.from(sheet.cssRules).forEach(rule => {
+              const t = rule.cssText || '';
+              if (t.includes('.pm-') || t.includes('.page-mock') || t.includes(':root')) css += t + '\n';
+            });
+          } catch {}
+        });
+      } catch {}
+      const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>页面模拟展示</title><style>*{box-sizing:border-box}body{margin:0;padding:24px;font-family:-apple-system,sans-serif;background:#f7f8fa}h1{font-size:15px;color:#1a365d;margin:0 0 4px}.export-meta{font-size:12px;color:#a0aec0;margin-bottom:20px}${css}</style></head><body><h1>📋 页面模拟展示原型</h1><div class="export-meta">由朝曦家办-需求打磨工作台生成 · ${now}</div>${previewList.innerHTML}</body></html>`;
+      zip.file('04_页面展示原型.html', html); fileCount++;
+    }
+
+    // 05 PRD 文档
+    const prdText = document.getElementById('prd-inline-content')?.textContent?.trim();
+    if (prdText) { zip.file('05_PRD需求规格说明书.txt', prdText); fileCount++; }
+
+    if (fileCount === 0) { alert('暂无已生成的物料可下载，请先生成内容'); return; }
+
+    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{ level:6 } });
+    const dateStr = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+    downloadBlob(blob, `朝曦需求物料包_${dateStr}.zip`);
+    showToast(`📦 已打包 ${fileCount} 个文件，正在下载…`);
+  } catch(e) {
+    alert('打包失败：' + e.message);
+  } finally {
+    if (btn)    { btn.disabled = false;    btn.textContent = '📦 打包下载'; }
+    if (genBtn) genBtn.disabled = false;
+  }
 }
 
 // ══════════════════════════════════════════
