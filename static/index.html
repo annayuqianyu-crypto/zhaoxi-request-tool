@@ -1933,7 +1933,13 @@ async function renderMermaidInto(wrapId, id, code, scale) {
   const attempts = [code, _cleanMermaidCode(code)];
   for (let i = 0; i < attempts.length; i++) {
     try {
-      const { svg } = await mermaid.render(id + '_a' + i, attempts[i], wrap);
+      const renderId = id + '_a' + i;
+      // 每次尝试前清空容器，防止 Mermaid v10 遗留 DOM 污染后续渲染
+      wrap.innerHTML = '';
+      document.querySelectorAll('#' + renderId + ', [id^="' + renderId + '"]').forEach(el => {
+        if (!wrap.contains(el)) el.remove();
+      });
+      const { svg } = await mermaid.render(renderId, attempts[i], wrap);
       wrap.innerHTML = svg;
       const s = wrap.querySelector('svg');
       if (s) {
@@ -1946,6 +1952,7 @@ async function renderMermaidInto(wrapId, id, code, scale) {
       }
       return; // 成功则退出
     } catch(e) {
+      wrap.innerHTML = ''; // 清空失败后的残留
       if (i < attempts.length - 1) continue; // 继续下一次尝试
       wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图语法有误，请重新点击「⚡ 生成」</div>';
     }
@@ -2271,6 +2278,12 @@ async function generateSection(type) {
     if (type === 'prd') {
       await generatePRDInline(); return;
     }
+
+    // 流程图（wireframe）使用流式生成，可实时展示代码进度
+    if (type === 'wireframe') {
+      await generateWireframeStream(); return;
+    }
+
     const resp = await fetch('/api/generate', {
       method: 'POST',
       headers: getApiHeaders(),
@@ -2284,10 +2297,6 @@ async function generateSection(type) {
       await renderFlowchartSection(data.mermaid);   // 渲染到需求清单>流程图，不影响访谈流程
       setGenBtnState(type, 'done');
       showToast('🔄 业务流程图已生成');
-    } else if (type === 'wireframe' && data.mermaid) {
-      await renderWireframeDiagram(data.mermaid);
-      setGenBtnState(type, 'done');
-      showToast('📐 功能流程设计图已生成');
     } else if (data.requirements && data.requirements.length) {
       currentRequirements = data.requirements;
       if (type === 'summary') {
@@ -2307,6 +2316,71 @@ async function generateSection(type) {
     }
   } catch(e) {
     setGenBtnState(type, 'idle');
+    alert('生成失败：' + e.message);
+  }
+}
+
+// 流式生成功能流程图：边接收代码边展示，收到 [DONE] 后触发渲染
+async function generateWireframeStream() {
+  const wrap = document.getElementById('wireframe-diagram-wrap');
+  if (wrap) {
+    // 显示实时代码预览区域
+    wrap.innerHTML = '<div style="padding:12px 16px;background:#1e293b;border-radius:8px;color:#94a3b8;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:360px;overflow-y:auto;line-height:1.6" id="wf-stream-pre">正在生成流程图代码，请稍候…</div>';
+  }
+  try {
+    const resp = await fetch('/api/generate-stream', {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ history, requirements: currentRequirements, type: 'wireframe' })
+    });
+    if (!resp.ok) {
+      let errMsg = 'HTTP ' + resp.status;
+      try { const e = await resp.json(); errMsg = e.detail || errMsg; } catch {}
+      throw new Error(errMsg);
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let accumulated = '';
+    const pre = document.getElementById('wf-stream-pre');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      accumulated += chunk;
+      // 实时更新代码预览（去掉结束标记后的内容）
+      if (pre) {
+        const display = accumulated.replace(/\n\ndata:.*$/s, '').trim();
+        pre.textContent = display || '正在生成流程图代码，请稍候…';
+        pre.scrollTop = pre.scrollHeight; // 自动滚动到底部
+      }
+      if (accumulated.includes('data: [DONE]') || accumulated.includes('data: [ERR]')) break;
+    }
+    accumulated += decoder.decode();
+
+    if (accumulated.includes('data: [ERR]')) {
+      const errMatch = accumulated.match(/data: \[ERR\](\{.+\})/);
+      const errData = errMatch ? JSON.parse(errMatch[1]) : {};
+      throw new Error(errData.__stream_error__ || 'API 返回错误');
+    }
+
+    const rawCode = accumulated.replace(/\n\ndata: \[DONE\].*$/s, '').trim();
+    if (!rawCode) {
+      setGenBtnState('wireframe', 'idle');
+      return;
+    }
+    // 清洗并渲染
+    const cleaned = _cleanMermaidCode(rawCode) || rawCode;
+    await renderWireframeDiagram(cleaned);
+    setGenBtnState('wireframe', 'done');
+    showToast('📐 功能流程设计图已生成');
+    // 保存到会话
+    currentWireframeMermaid = cleaned;
+    saveCurrentSession();
+  } catch(e) {
+    setGenBtnState('wireframe', 'idle');
+    if (wrap) wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">生成失败：' + e.message + '</div>';
     alert('生成失败：' + e.message);
   }
 }
@@ -2353,13 +2427,19 @@ async function renderWireframeDiagram(code) {
 
   // 两次尝试：原始代码 → 客户端清洗后的代码
   const attempts = [code, _cleanMermaidCode(code)];
-  let rendered = false;
   for (let i = 0; i < attempts.length; i++) {
     try {
-      const { svg } = await mermaid.render('mmd-wf-' + diagCounter + '_a' + i, attempts[i], wrap);
+      // 每次尝试前彻底清空容器，避免 Mermaid v10 遗留 DOM 污染下一次渲染
+      wrap.innerHTML = '';
+      // 清除 Mermaid 可能在容器外注入的残留 SVG 元素
+      const staleId = 'mmd-wf-' + diagCounter + '_a' + i;
+      document.querySelectorAll('#' + staleId + ', [id^="' + staleId + '"]').forEach(el => {
+        if (!wrap.contains(el)) el.remove();
+      });
+      const { svg } = await mermaid.render(staleId, attempts[i], wrap);
       wrap.innerHTML = svg;
       const s = wrap.querySelector('svg');
-      if (!s) { rendered = false; continue; }
+      if (!s) { wrap.innerHTML = ''; continue; }
       if (document.body.classList.contains('mobile-mode')) {
         fitMobileSvg(wrap, s);
       } else {
@@ -2370,9 +2450,9 @@ async function renderWireframeDiagram(code) {
         wireframeScale = w > containerW ? containerW / w : 1;
         _wfApplySize(s, wrap, wireframeScale);
       }
-      rendered = true;
-      break;
+      return; // 成功渲染，直接返回
     } catch(e) {
+      wrap.innerHTML = ''; // 清空失败后的残留内容
       if (i < attempts.length - 1) continue;
       wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">渲染失败，请重新点击「⚡ 生成」</div>';
     }

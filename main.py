@@ -681,6 +681,89 @@ async def generate_section(req: GenerateRequest,
     raise HTTPException(400, "未知生成类型")
 
 
+@app.post("/api/generate-stream")
+async def generate_section_stream(req: GenerateRequest,
+                                   x_api_key: Optional[str] = Header(None),
+                                   x_api_url: Optional[str] = Header(None),
+                                   x_api_model: Optional[str] = Header(None)):
+    """流式生成 Mermaid 图表代码（wireframe / flowchart），逐 token 推送到前端。
+    前端可实时显示代码文本，收到 [DONE] 后再触发渲染。"""
+    if req.type not in ("wireframe", "flowchart"):
+        raise HTTPException(400, "此接口仅支持 wireframe 和 flowchart 类型")
+
+    client_async = _get_async_client(x_api_key, x_api_url)
+    model = _get_model(x_api_model)
+    gen_history = _truncate_history(list(req.history), max_pairs=10)
+    history_text = "\n\n".join(
+        f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
+        for m in gen_history
+    )
+
+    if req.type == "wireframe":
+        prompt = f"""根据以下访谈记录，生成一份供 IT 人员使用的功能流程设计图（Mermaid 格式）。
+
+访谈记录：
+{history_text}
+
+【严格遵守以下 Mermaid 语法规则，违反任一条均会导致图表无法渲染】：
+1. 第一行必须是：graph TD
+2. 节点 ID 只允许使用英文字母和数字（如 U1、S2、D3），严禁使用中文、空格或特殊符号作为 ID
+3. 节点标签必须用双引号包裹：
+   - 操作步骤（矩形）：U1["用户提交申请"]
+   - 判断节点（菱形）：D1{{"审核是否通过？"}}
+   - 开始/结束（圆角）：S(["开始"]) 或 E(["结束"])
+4. 连线用 --> 或 -->|"说明"|
+5. 多方案/多路径用 subgraph 分组：subgraph "方案A" ... end
+6. 使用 classDef + class 语句为节点着色（不要用 :::className 内联写法）：
+   classDef user fill:#fff3cd,stroke:#f59e0b,color:#92400e
+   classDef sys fill:#dbeafe,stroke:#3b82f6,color:#1e40af
+   classDef dec fill:#fce7f3,stroke:#ec4899,color:#831843
+   classDef ep fill:#d1fae5,stroke:#10b981,color:#065f46
+   class U1,U2 user
+   class S1,S2 sys
+   class D1,D2 dec
+   class START,END ep
+7. 标签内不能出现未转义的英文双引号，用中文标点替代
+8. 只输出 Mermaid 代码，不要任何说明、注释或多余文字"""
+    else:
+        prompt = f"""根据以下访谈记录，生成一份完整的 Mermaid 业务流程图。
+
+访谈记录：
+{history_text}
+
+【严格遵守以下 Mermaid 语法规则，违反任一条均会导致图表无法渲染】：
+1. 第一行必须是：graph TD
+2. 节点 ID 只允许使用英文字母和数字（如 A1、stepB、end1），严禁使用中文、空格或特殊符号作为 ID
+3. 节点标签必须用双引号包裹：A1["中文描述"]；判断节点用花括号：D1{{"是否满足？"}}；开始/结束用圆括号：S(["开始"])
+4. 连线用 --> 或 -->|"说明文字"|
+5. 可以用 subgraph 对阶段分组：subgraph "阶段名称" ... end
+6. 如需节点样式，使用 classDef + class 语句（不要用 :::className 内联写法）
+7. 标签内不能出现未转义的英文双引号，用中文标点替代
+8. 只输出 Mermaid 代码，不要任何说明、注释或多余文字"""
+
+    async def stream_gen():
+        try:
+            stream = await client_async.chat.completions.create(
+                model=model, max_tokens=2500,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content or ""
+                if delta:
+                    yield delta.encode("utf-8")
+            yield b"\n\ndata: [DONE]"
+        except Exception as e:
+            err = json.dumps({"__stream_error__": str(e)}, ensure_ascii=False)
+            yield f"\n\ndata: [ERR]{err}".encode("utf-8")
+
+    return StreamingResponse(
+        stream_gen(),
+        media_type="text/plain; charset=utf-8",
+        headers={"X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/analyze-definition")
 async def analyze_definition(req: ExportRequest,
                               x_api_key: Optional[str] = Header(None),
