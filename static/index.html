@@ -2636,7 +2636,7 @@ async function renderUiWireframeDiagram(code) {
     } catch(e) {
       document.getElementById(renderId)?.remove();
       if (i < attempts.length - 1) continue;
-      wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">渲染失败，请重新点击「⚡ 生成」</div>';
+      wrap.innerHTML = '<div class="diagram-placeholder" style="color:#f6ad55">图形较大，请再次点击生成</div>';
     }
   }
 }
