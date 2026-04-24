@@ -1957,20 +1957,18 @@ function _cleanMermaidCode(code) {
 
 async function renderMermaidInto(wrapId, id, code, scale) {
   const wrap = document.getElementById(wrapId);
-  // 若容器不存在或已隐藏，跳过渲染，防止 mermaid 把错误输出追加到 document.body
+  // 若容器不存在或已隐藏，跳过渲染
   if (!wrap || wrap.style.display === 'none') return;
 
-  // 两次尝试：第一次用原始代码，第二次用客户端清洗后的代码
+  // 两次尝试：原始代码 → 客户端清洗后的代码
   const attempts = [code, _cleanMermaidCode(code)];
   for (let i = 0; i < attempts.length; i++) {
+    const renderId = id + '_a' + i;
     try {
-      const renderId = id + '_a' + i;
-      // 每次尝试前清空容器，防止 Mermaid v10 遗留 DOM 污染后续渲染
-      wrap.innerHTML = '';
-      document.querySelectorAll('#' + renderId + ', [id^="' + renderId + '"]').forEach(el => {
-        if (!wrap.contains(el)) el.remove();
-      });
-      const { svg } = await mermaid.render(renderId, attempts[i], wrap);
+      // 删除 Mermaid 可能在 document 上残留的同 ID 临时元素
+      document.getElementById(renderId)?.remove();
+      // 使用两参数形式：Mermaid 在内部临时元素渲染，不污染 wrap
+      const { svg } = await mermaid.render(renderId, attempts[i]);
       wrap.innerHTML = svg;
       const s = wrap.querySelector('svg');
       if (s) {
@@ -1983,8 +1981,8 @@ async function renderMermaidInto(wrapId, id, code, scale) {
       }
       return; // 成功则退出
     } catch(e) {
-      wrap.innerHTML = ''; // 清空失败后的残留
-      if (i < attempts.length - 1) continue; // 继续下一次尝试
+      document.getElementById(renderId)?.remove();
+      if (i < attempts.length - 1) continue;
       wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">流程图语法有误，请重新点击「⚡ 生成」</div>';
     }
   }
@@ -2481,39 +2479,31 @@ async function renderUiWireframeDiagram(code) {
   if (!wrap) return;
   const attempts = [code, _cleanMermaidCode(code)];
   for (let i = 0; i < attempts.length; i++) {
+    const renderId = 'mmd-uiwf-' + uiWfDiagCounter + '_a' + i;
     try {
-      wrap.innerHTML = '';
-      const renderId = 'mmd-uiwf-' + uiWfDiagCounter + '_a' + i;
-      document.querySelectorAll('#' + renderId + ', [id^="' + renderId + '"]').forEach(el => {
-        if (!wrap.contains(el)) el.remove();
-      });
-      const { svg } = await mermaid.render(renderId, attempts[i], wrap);
+      // 删除 Mermaid 可能在 document 上残留的同 ID 临时元素
+      document.getElementById(renderId)?.remove();
+      // 两参数形式：Mermaid 内部渲染，不污染 wrap
+      const { svg } = await mermaid.render(renderId, attempts[i]);
       wrap.innerHTML = svg;
       const s = wrap.querySelector('svg');
       if (!s) { wrap.innerHTML = ''; continue; }
       if (document.body.classList.contains('mobile-mode')) {
         fitMobileSvg(wrap, s);
       } else {
-        const vb = s.getAttribute('viewBox');
-        if (vb) {
-          const parts = vb.split(/\s+/);
-          uiWireframeNativeW = parseFloat(parts[2]) || 800;
-          uiWireframeNativeH = parseFloat(parts[3]) || 600;
-        } else {
-          uiWireframeNativeW = s.getBoundingClientRect().width || 800;
-          uiWireframeNativeH = s.getBoundingClientRect().height || 600;
-          if (!s.getAttribute('viewBox')) s.setAttribute('viewBox', `0 0 ${uiWireframeNativeW} ${uiWireframeNativeH}`);
-        }
+        const { w, h } = _wfGetNative(s);
+        if (!s.getAttribute('viewBox')) s.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        uiWireframeNativeW = w; uiWireframeNativeH = h;
         const containerW = wrap.clientWidth || wrap.parentElement?.clientWidth || 800;
-        uiWireframeScale = uiWireframeNativeW > containerW ? containerW / uiWireframeNativeW : 1;
-        s.setAttribute('width',  Math.round(uiWireframeNativeW * uiWireframeScale));
-        s.setAttribute('height', Math.round(uiWireframeNativeH * uiWireframeScale));
+        uiWireframeScale = w > containerW ? containerW / w : 1;
+        s.setAttribute('width',  Math.round(w * uiWireframeScale));
+        s.setAttribute('height', Math.round(h * uiWireframeScale));
         s.style.display = 'block';
-        wrap.style.minHeight = Math.max(180, Math.round(uiWireframeNativeH * uiWireframeScale) + 32) + 'px';
+        wrap.style.minHeight = Math.max(180, Math.round(h * uiWireframeScale) + 32) + 'px';
       }
       return;
     } catch(e) {
-      wrap.innerHTML = '';
+      document.getElementById(renderId)?.remove();
       if (i < attempts.length - 1) continue;
       wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">渲染失败，请重新点击「⚡ 生成」</div>';
     }
@@ -2582,15 +2572,12 @@ async function renderWireframeDiagram(code) {
   // 两次尝试：原始代码 → 客户端清洗后的代码
   const attempts = [code, _cleanMermaidCode(code)];
   for (let i = 0; i < attempts.length; i++) {
+    const renderId = 'mmd-wf-' + diagCounter + '_a' + i;
     try {
-      // 每次尝试前彻底清空容器，避免 Mermaid v10 遗留 DOM 污染下一次渲染
-      wrap.innerHTML = '';
-      // 清除 Mermaid 可能在容器外注入的残留 SVG 元素
-      const staleId = 'mmd-wf-' + diagCounter + '_a' + i;
-      document.querySelectorAll('#' + staleId + ', [id^="' + staleId + '"]').forEach(el => {
-        if (!wrap.contains(el)) el.remove();
-      });
-      const { svg } = await mermaid.render(staleId, attempts[i], wrap);
+      // 删除 Mermaid 可能在 document 上残留的同 ID 临时元素
+      document.getElementById(renderId)?.remove();
+      // 两参数形式：Mermaid 在内部临时元素渲染，不写入 wrap，彻底避免容器污染
+      const { svg } = await mermaid.render(renderId, attempts[i]);
       wrap.innerHTML = svg;
       const s = wrap.querySelector('svg');
       if (!s) { wrap.innerHTML = ''; continue; }
@@ -2606,7 +2593,7 @@ async function renderWireframeDiagram(code) {
       }
       return; // 成功渲染，直接返回
     } catch(e) {
-      wrap.innerHTML = ''; // 清空失败后的残留内容
+      document.getElementById(renderId)?.remove();
       if (i < attempts.length - 1) continue;
       wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">渲染失败，请重新点击「⚡ 生成」</div>';
     }
