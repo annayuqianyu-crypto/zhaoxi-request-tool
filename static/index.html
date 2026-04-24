@@ -3127,17 +3127,23 @@ async function exportSVGasPNG(wrapId, filename) {
   }
   W = Math.max(W, 600); H = Math.max(H, 400);
 
-  // Clone SVG，强制恢复原始尺寸（排除 CSS transform 影响）
+  // Clone SVG，强制恢复原始尺寸
   const cloned = svg.cloneNode(true);
   cloned.setAttribute('width', W);
   cloned.setAttribute('height', H);
   cloned.style.transform = 'none';
-  // 移除 foreignObject：浏览器安全策略会让含 foreignObject 的 SVG 污染 canvas，导致 toBlob 失败
+  // 确保 SVG 命名空间（序列化时需要）
+  if (!cloned.getAttribute('xmlns')) cloned.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  // 移除 foreignObject（含 foreignObject 的 SVG 会污染 canvas，导致 toBlob/toDataURL 报安全错误）
   cloned.querySelectorAll('foreignObject').forEach(el => el.remove());
+  // 移除 style 标签中的 @font-face（外部字体 URL 同样会污染 canvas）
+  cloned.querySelectorAll('style').forEach(styleEl => {
+    styleEl.textContent = styleEl.textContent.replace(/@font-face\s*\{[^}]*\}/g, '');
+  });
 
-  const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(cloned);
-  const blob   = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-  const url    = URL.createObjectURL(blob);
+  let svgStr = new XMLSerializer().serializeToString(cloned);
+  // 用 data: URI（比 blob: URI 更可靠，避免浏览器对 blob scheme 的限制）
+  const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
 
   await new Promise((resolve, reject) => {
     const img = new Image();
@@ -3151,24 +3157,24 @@ async function exportSVGasPNG(wrapId, filename) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, W, H);
       ctx.drawImage(img, 0, 0, W, H);
-      URL.revokeObjectURL(url);
-      // 优先 toBlob；若 canvas 仍被污染则 fallback 到 toDataURL
-      const _dl = (dataUrl) => {
-        const a = document.createElement('a');
-        a.href = dataUrl; a.download = filename; a.click();
-        resolve();
-      };
+      // ⚠️ 必须在 img.onload 内同步调用 toDataURL（不能用异步 toBlob）
+      // canvas.toBlob 是异步的，其回调触发时用户手势上下文已失效，
+      // 导致 a.click() 触发的下载被浏览器静默拦截。
       try {
-        canvas.toBlob(pngBlob => {
-          if (pngBlob) { downloadBlob(pngBlob, filename); resolve(); }
-          else { try { _dl(canvas.toDataURL('image/png')); } catch(e2) { reject(e2); } }
-        }, 'image/png');
+        const pngDataUrl = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = pngDataUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        resolve();
       } catch(e) {
-        try { _dl(canvas.toDataURL('image/png')); } catch(e2) { reject(new Error('图片导出失败：' + e2.message)); }
+        reject(new Error('图片生成失败：' + e.message));
       }
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG渲染失败，请重试')); };
-    img.src = url;
+    img.onerror = () => reject(new Error('SVG加载失败，请重试'));
+    img.src = dataUri;
   });
   showToast('📷 图片已下载：' + filename);
 }
