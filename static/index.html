@@ -3074,10 +3074,40 @@ async function exportRequirementsWord() {
 }
 
 // ── 页面展示导出 ──
+// 把元素的所有关键可视样式（已解析 CSS 变量的计算值）写成 inline style
+// 必须在调用 html2canvas 之前完成，否则 html2canvas 内部仍会读 CSS var() 导致发白
+function _inlineComputedStyles(srcEl, dstEl) {
+  const cs = window.getComputedStyle(srcEl);
+  // 颜色、字体、边框、背景、布局等核心属性
+  const props = [
+    'color','backgroundColor','backgroundImage','backgroundSize','backgroundPosition','backgroundRepeat',
+    'borderTopColor','borderRightColor','borderBottomColor','borderLeftColor',
+    'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+    'borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle',
+    'borderTopLeftRadius','borderTopRightRadius','borderBottomLeftRadius','borderBottomRightRadius',
+    'fontSize','fontWeight','fontFamily','fontStyle','lineHeight','letterSpacing',
+    'textAlign','textDecoration','textTransform','whiteSpace','wordBreak',
+    'opacity','boxShadow','outline','outlineColor',
+    'padding','paddingTop','paddingRight','paddingBottom','paddingLeft',
+    'margin','marginTop','marginRight','marginBottom','marginLeft',
+    'display','flexDirection','alignItems','justifyContent','flexWrap','gap',
+    'gridTemplateColumns','columnGap','rowGap',
+    'width','height','minWidth','minHeight','maxWidth','maxHeight',
+    'boxSizing','overflow','overflowX','overflowY',
+    'position','top','left','right','bottom','zIndex',
+    'verticalAlign','cursor',
+  ];
+  props.forEach(p => {
+    try {
+      const v = cs[p];
+      if (v !== undefined && v !== '') dstEl.style[p] = v;
+    } catch {}
+  });
+}
+
 async function exportPreviewImage() {
   const container = document.getElementById('preview-list');
   if (!container || !container.querySelector('.page-mock-wrap')) { alert('请先生成页面展示内容'); return; }
-  // 懒加载 html2canvas
   if (!window.html2canvas) {
     showToast('⏳ 正在加载截图组件…');
     await new Promise((res, rej) => {
@@ -3087,47 +3117,41 @@ async function exportPreviewImage() {
       document.head.appendChild(s);
     }).catch(e => { alert(e.message); return Promise.reject(e); });
   }
-  showToast('⏳ 正在生成高清截图…');
+  showToast('⏳ 正在生成高清截图，请稍候…');
+
+  // ── 核心修复：在调用 html2canvas 前预处理克隆体 ──
+  // html2canvas 会重新读取 CSS 规则（含 var(--navy) 等变量），onclone 回调无效。
+  // 正确做法：自己克隆 → 对每个节点用 getComputedStyle 把已解析的计算值写成
+  // inline style → 把克隆体放在屏幕外可见区域 → html2canvas 只看到 inline 值，
+  // 永远不需要解析 CSS 变量，颜色完全正确。
+  const clone = container.cloneNode(true);
+  const srcEls = [container, ...Array.from(container.querySelectorAll('*'))];
+  const dstEls = [clone,     ...Array.from(clone.querySelectorAll('*'))];
+  srcEls.forEach((src, i) => { if (i < dstEls.length) _inlineComputedStyles(src, dstEls[i]); });
+
+  // 放在屏幕外但仍在渲染树中（position:fixed + left 负值）
+  const tempWrap = document.createElement('div');
+  tempWrap.style.cssText = `position:fixed;left:-99999px;top:0;width:${container.scrollWidth}px;background:#f7f8fa;z-index:-1;pointer-events:none;`;
+  tempWrap.appendChild(clone);
+  document.body.appendChild(tempWrap);
+
   try {
-    const canvas = await html2canvas(container, {
+    const canvas = await html2canvas(clone, {
       backgroundColor: '#f7f8fa',
-      scale: 3,                      // 3× 高清，避免模糊
+      scale: 3,
       useCORS: true,
       allowTaint: false,
       logging: false,
       scrollX: 0,
-      scrollY: -window.scrollY,
-      windowWidth: document.documentElement.clientWidth,
-      // onclone：用 getComputedStyle 把 CSS 自定义属性（--navy 等）
-      // 解析为真实颜色值后写入克隆节点，彻底修复 html2canvas 不支持
-      // CSS var() 导致的发白/颜色丢失问题
-      onclone: (_doc, clonedEl) => {
-        const srcNodes = Array.from(container.querySelectorAll('*'));
-        const dstNodes = Array.from(clonedEl.querySelectorAll('*'));
-        const colorProps = [
-          'color', 'backgroundColor',
-          'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
-          'outlineColor', 'textDecorationColor'
-        ];
-        srcNodes.forEach((src, i) => {
-          if (i >= dstNodes.length) return;
-          const cs = window.getComputedStyle(src);
-          colorProps.forEach(p => {
-            const v = cs[p];
-            // 跳过透明和初始值，避免把本该透明的背景覆盖成白色
-            if (v && v !== 'rgba(0, 0, 0, 0)' && v !== 'transparent' && v !== '') {
-              dstNodes[i].style[p] = v;
-            }
-          });
-          // 字体大小 / 粗细也一起写入，防止字体渲染不一致
-          dstNodes[i].style.fontSize   = cs.fontSize;
-          dstNodes[i].style.fontWeight = cs.fontWeight;
-          dstNodes[i].style.lineHeight = cs.lineHeight;
-        });
-      }
+      scrollY: 0,
+      width: container.scrollWidth,
     });
-    canvas.toBlob(blob => { downloadBlob(blob, '页面展示.png'); showToast('📷 页面展示高清截图已下载'); }, 'image/png');
-  } catch(e) { alert('截图失败：' + e.message); }
+    canvas.toBlob(blob => { downloadBlob(blob, '页面展示.png'); showToast('📷 高清截图已下载'); }, 'image/png');
+  } catch(e) {
+    alert('截图失败：' + e.message);
+  } finally {
+    document.body.removeChild(tempWrap);
+  }
 }
 
 function exportPreviewText() {
@@ -3156,13 +3180,28 @@ function exportPreviewText() {
   showToast('📄 文本说明已下载');
 }
 
+// 把任意 HTTP / stream 错误信息统一转成可读字符串
+function _fmtErr(e) {
+  if (!e) return '未知错误';
+  if (typeof e === 'string') return e;
+  if (typeof e.message === 'string' && e.message) return e.message;
+  return String(e);
+}
+// FastAPI detail 字段可能是字符串（普通错误）或对象数组（422 验证错误）
+function _fmtDetail(detail) {
+  if (!detail) return '';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map(d => d.msg || JSON.stringify(d)).join('；');
+  return JSON.stringify(detail);
+}
+
 // 调用 AI 生成各功能页面的 HTML/CSS/JS 实现代码（流式，避免超时）
 async function exportPreviewCode() {
   if (!currentRequirements.length) { alert('请先生成页面展示内容'); return; }
   const btn = document.querySelector('[onclick="exportPreviewCode()"]');
   const origText = btn ? btn.textContent : '';
   if (btn) { btn.textContent = '生成中…'; btn.disabled = true; }
-  showToast('⏳ AI正在生成前端代码，请稍候（约30秒）…');
+  showToast('⏳ AI正在生成前端代码，请稍候（约30-60秒）…');
   try {
     const resp = await fetch('/api/export/code', {
       method: 'POST',
@@ -3171,7 +3210,11 @@ async function exportPreviewCode() {
     });
     if (!resp.ok) {
       let errMsg = 'HTTP ' + resp.status;
-      try { const e = await resp.json(); errMsg = e.detail || errMsg; } catch {}
+      try {
+        const errJson = await resp.json();
+        const detail = _fmtDetail(errJson.detail);
+        if (detail) errMsg = detail;
+      } catch {}
       throw new Error(errMsg);
     }
     // 流式接收
@@ -3186,16 +3229,17 @@ async function exportPreviewCode() {
     }
     accumulated += decoder.decode();
     if (accumulated.includes('data: [ERR]')) {
-      const m = accumulated.match(/data: \[ERR\](\{.+\})/);
-      const d = m ? JSON.parse(m[1]) : {};
-      throw new Error(d.__stream_error__ || '生成失败');
+      const m = accumulated.match(/data: \[ERR\](\{[\s\S]+?\})\s*$/);
+      let streamErr = '生成失败，请重试';
+      try { if (m) { const d = JSON.parse(m[1]); streamErr = d.__stream_error__ || streamErr; } } catch {}
+      throw new Error(streamErr);
     }
     const code = accumulated.replace(/\n\ndata: \[DONE\].*$/s, '').trim();
     if (!code) throw new Error('AI 返回内容为空，请重试');
     downloadText(code, '前端实现代码.html');
     showToast('📝 前端代码已下载（HTML/CSS/JS 实现）');
   } catch(e) {
-    alert('代码生成失败：' + e.message);
+    alert('代码生成失败：' + _fmtErr(e));
   } finally {
     if (btn) { btn.textContent = origText; btn.disabled = false; }
   }
