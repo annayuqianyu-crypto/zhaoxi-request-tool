@@ -2537,12 +2537,36 @@ async function generateUiWireframeStream() {
 }
 
 let uiWfDiagCounter = 0;
+// 为 ui_wireframe 注入白底黑字主题覆盖指令（覆盖全局 navy 主题）
+function _injectUiWfTheme(code) {
+  if (!code) return code;
+  // 若已含 %%{init 则不重复注入
+  if (/%%\s*\{/.test(code)) return code;
+  const initDir = `%%{init: {'theme': 'base', 'themeVariables': {
+    'primaryColor': '#ffffff',
+    'primaryTextColor': '#000000',
+    'primaryBorderColor': '#333333',
+    'lineColor': '#FFD700',
+    'secondaryColor': '#f5f5f5',
+    'tertiaryColor': '#fffde7',
+    'clusterBkg': '#f8f8f8',
+    'clusterBorder': '#999999',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+    'fontSize': '14px'
+  }}}%%`;
+  return initDir + '\n' + code;
+}
+
 async function renderUiWireframeDiagram(code) {
   currentUiWireframeMermaid = code;
   uiWfDiagCounter++;
   const wrap = document.getElementById('ui-wireframe-diagram-wrap');
   if (!wrap) return;
-  const attempts = [code, _cleanMermaidCode(code)];
+  // 注入白底黑字主题，并准备两个候选（带/不带清理）
+  const c1 = _injectUiWfTheme(code);
+  const c2 = _injectUiWfTheme(_cleanMermaidCode(code));
+  const attempts = [c1, c2];
   for (let i = 0; i < attempts.length; i++) {
     const renderId = 'mmd-uiwf-' + uiWfDiagCounter + '_a' + i;
     try {
