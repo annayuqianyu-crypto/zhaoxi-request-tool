@@ -3369,38 +3369,76 @@ async function exportPreviewImage() {
   }
   showToast('⏳ 正在生成高清截图，请稍候…');
 
-  // ── 核心修复：在调用 html2canvas 前预处理克隆体 ──
-  // html2canvas 会重新读取 CSS 规则（含 var(--navy) 等变量），onclone 回调无效。
-  // 正确做法：自己克隆 → 对每个节点用 getComputedStyle 把已解析的计算值写成
-  // inline style → 把克隆体放在屏幕外可见区域 → html2canvas 只看到 inline 值，
-  // 永远不需要解析 CSS 变量，颜色完全正确。
-  const clone = container.cloneNode(true);
-  const srcEls = [container, ...Array.from(container.querySelectorAll('*'))];
-  const dstEls = [clone,     ...Array.from(clone.querySelectorAll('*'))];
-  srcEls.forEach((src, i) => { if (i < dstEls.length) _inlineComputedStyles(src, dstEls[i]); });
+  // ── 根本修复：预先收集计算样式 → onclone 内剥除样式表 → 写入已解析值 ──
+  //
+  // 之前的错误：把克隆体放入同一个 document，html2canvas 仍会读该 document
+  // 的 <style> 规则（含 var(--navy)），CSS 变量无法解析 → 颜色变白。
+  //
+  // 正确做法：
+  //   1. 在克隆前用 getComputedStyle 把所有元素已解析的计算值收集到数组
+  //   2. html2canvas 的 onclone 回调提供一个独立的 clonedDoc（与主页面隔离）
+  //   3. 在 onclone 里删掉 clonedDoc 里的所有 <style>/<link>（去掉 CSS 变量来源）
+  //   4. 把第1步收集到的计算值作为 inline style 写入 clonedDoc 的元素
+  //   → html2canvas 扫描 clonedDoc 时只看到纯粹的 inline 值，颜色完全正确
 
-  // 放在屏幕外但仍在渲染树中（position:fixed + left 负值）
-  const tempWrap = document.createElement('div');
-  tempWrap.style.cssText = `position:fixed;left:-99999px;top:0;width:${container.scrollWidth}px;background:#f7f8fa;z-index:-1;pointer-events:none;`;
-  tempWrap.appendChild(clone);
-  document.body.appendChild(tempWrap);
+  // Step1：收集计算样式（在原始 document 里，getComputedStyle 能拿到完整值）
+  const styleProps = [
+    'color','backgroundColor','backgroundImage','backgroundSize','backgroundPosition','backgroundRepeat',
+    'borderTopColor','borderRightColor','borderBottomColor','borderLeftColor',
+    'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+    'borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle',
+    'borderTopLeftRadius','borderTopRightRadius','borderBottomLeftRadius','borderBottomRightRadius',
+    'fontSize','fontWeight','fontFamily','fontStyle','lineHeight','letterSpacing',
+    'textAlign','textDecoration','textTransform','whiteSpace','wordBreak',
+    'opacity','boxShadow',
+    'paddingTop','paddingRight','paddingBottom','paddingLeft',
+    'marginTop','marginRight','marginBottom','marginLeft',
+    'display','flexDirection','alignItems','justifyContent','flexWrap','gap',
+    'gridTemplateColumns','columnGap','rowGap',
+    'width','height','minWidth','minHeight','maxWidth','maxHeight',
+    'boxSizing','overflow','overflowX','overflowY',
+    'position','top','left','right','bottom','zIndex',
+    'verticalAlign',
+  ];
+  const srcEls = [container, ...Array.from(container.querySelectorAll('*'))];
+  const cachedStyles = srcEls.map(el => {
+    const cs = window.getComputedStyle(el);
+    const s = {};
+    styleProps.forEach(p => { try { const v = cs[p]; if (v) s[p] = v; } catch {} });
+    return s;
+  });
 
   try {
-    const canvas = await html2canvas(clone, {
+    const canvas = await html2canvas(container, {
       backgroundColor: '#f7f8fa',
       scale: 3,
-      useCORS: true,
+      useCORS: false,
       allowTaint: false,
       logging: false,
       scrollX: 0,
       scrollY: 0,
-      width: container.scrollWidth,
+      onclone: (clonedDoc, clonedEl) => {
+        // Step2：从隔离的 clonedDoc 中移除所有样式表（CSS 变量不复存在）
+        clonedDoc.querySelectorAll('link[rel="stylesheet"], style').forEach(s => s.remove());
+        // Step3：把预先收集的计算值写入克隆体（inline style 无变量，html2canvas 直接取值）
+        const dstEls = [clonedEl, ...Array.from(clonedEl.querySelectorAll('*'))];
+        cachedStyles.forEach((s, i) => {
+          if (i >= dstEls.length) return;
+          Object.entries(s).forEach(([p, v]) => { try { dstEls[i].style[p] = v; } catch {} });
+        });
+      },
     });
-    canvas.toBlob(blob => { downloadBlob(blob, '页面展示.png'); showToast('📷 高清截图已下载'); }, 'image/png');
+    // 同步 toDataURL（避免异步 toBlob 回调时用户手势上下文已失效，下载被静默拦截）
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = '页面展示.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('📷 高清截图已下载');
   } catch(e) {
     alert('截图失败：' + e.message);
-  } finally {
-    document.body.removeChild(tempWrap);
   }
 }
 
