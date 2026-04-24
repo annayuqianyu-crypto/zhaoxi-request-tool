@@ -1230,13 +1230,14 @@
             <span class="gen-icon">🔲</span>
             <div>
               <div class="gen-title">界面线框图</div>
-              <div class="gen-subtitle">页面布局 · UI组件 · 跳转关系，IT人员可直接使用</div>
+              <div class="gen-subtitle">B端架构图 · 页面规格 · 字段实体映射，IT可直接交付</div>
             </div>
           </div>
           <div style="display:flex;gap:6px;align-items:center;">
             <div class="export-btn-group">
-              <button class="exp-btn" onclick="exportUiWireframePNG()" title="导出PNG图片">📷 图片</button>
+              <button class="exp-btn" onclick="exportUiWireframePNG()" title="导出业务流程图PNG">📷 图片</button>
               <button class="exp-btn" onclick="exportUiWireframeMermaid()" title="导出Mermaid代码">📝 代码</button>
+              <button class="exp-btn" onclick="exportUiWireframeSpec()" title="导出页面规格说明文档">📄 规格</button>
             </div>
             <button class="diagram-tool-btn" onclick="zoomUiWireframe(0.2)">＋</button>
             <button class="diagram-tool-btn" onclick="zoomUiWireframe(-0.2)">－</button>
@@ -1246,7 +1247,15 @@
         </div>
         <div class="gen-content-wrap" style="padding:12px;">
           <div id="ui-wireframe-diagram-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;overflow:auto;">
-            <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成界面线框图，展示各页面布局与跳转关系<br><span style="font-size:12px;color:#cbd5e0">每个页面对应一个区块，标注核心UI组件与操作按钮</span></div>
+            <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成业务流程总览图（黄色箭头）+ 核心页面规格说明<br><span style="font-size:12px;color:#cbd5e0">包含顶部导航·左侧菜单·操作区·数据区·实体字段映射</span></div>
+          </div>
+          <!-- 规格说明区（有内容时自动展示）-->
+          <div id="ui-wireframe-spec-wrap" style="display:none;margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border);">
+              <span style="font-size:13px;font-weight:700;color:#1a365d;">📋 核心页面规格说明</span>
+              <button onclick="toggleUiWireframeSpec(this)" style="font-size:12px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;color:#4a5568;">收起 ▲</button>
+            </div>
+            <pre id="ui-wireframe-spec-content" style="margin:0;padding:16px;font-size:12.5px;line-height:1.8;color:#2d3748;white-space:pre-wrap;word-break:break-all;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-height:480px;overflow-y:auto;background:white;"></pre>
           </div>
         </div>
       </div>
@@ -1433,6 +1442,7 @@ let currentMermaid = '';
 let currentRequirements = [];
 let currentWireframeMermaid = '';
 let currentUiWireframeMermaid = '';
+let currentUiWireframeSpec = '';      // 页面规格说明文本（[SPEC]...[/SPEC]）
 let uiWireframeNativeW = 800, uiWireframeNativeH = 600, uiWireframeScale = 1;
 let completeness = 0;
 let isLoading = false;
@@ -2417,12 +2427,52 @@ async function generateWireframeStream() {
   }
 }
 
+// 从 AI 输出中提取 [FLOW]...[/FLOW] 和 [SPEC]...[/SPEC] 两段
+function _parseUiWireframeOutput(raw) {
+  const flowMatch = raw.match(/\[FLOW\]([\s\S]*?)\[\/FLOW\]/);
+  const specMatch = raw.match(/\[SPEC\]([\s\S]*?)\[\/SPEC\]/);
+  let flow = flowMatch ? flowMatch[1].trim() : '';
+  let spec = specMatch ? specMatch[1].trim() : '';
+  // 兼容：如果 AI 没用分隔符，当作纯 Mermaid 代码
+  if (!flow && !spec) {
+    const hasMermaid = /^(graph|flowchart)\s+(TD|LR|BT|RL)/im.test(raw);
+    flow = hasMermaid ? raw : '';
+    spec = hasMermaid ? '' : raw;
+  }
+  return { flow, spec };
+}
+
+// 显示/隐藏规格说明区
+function toggleUiWireframeSpec(btn) {
+  const content = document.getElementById('ui-wireframe-spec-content');
+  if (!content) return;
+  const isCollapsed = content.style.display === 'none';
+  content.style.display = isCollapsed ? '' : 'none';
+  btn.textContent = isCollapsed ? '收起 ▲' : '展开 ▼';
+}
+
+// 渲染规格说明文本区
+function renderUiWireframeSpec(specText) {
+  const wrap = document.getElementById('ui-wireframe-spec-wrap');
+  const content = document.getElementById('ui-wireframe-spec-content');
+  if (!wrap || !content) return;
+  if (!specText || !specText.trim()) { wrap.style.display = 'none'; return; }
+  content.textContent = specText;
+  content.style.display = '';
+  wrap.style.display = '';
+  // 重置折叠按钮状态
+  const btn = wrap.querySelector('button');
+  if (btn) btn.textContent = '收起 ▲';
+}
+
 // ── 线框图（UI Wireframe）流式生成 ──
 async function generateUiWireframeStream() {
   const wrap = document.getElementById('ui-wireframe-diagram-wrap');
+  const specWrap = document.getElementById('ui-wireframe-spec-wrap');
   if (wrap) {
-    wrap.innerHTML = '<div style="padding:12px 16px;background:#1e293b;border-radius:8px;color:#94a3b8;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:360px;overflow-y:auto;line-height:1.6" id="ui-wf-stream-pre">正在生成界面线框图代码，请稍候…</div>';
+    wrap.innerHTML = '<div style="padding:12px 16px;background:#1e293b;border-radius:8px;color:#94a3b8;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:360px;overflow-y:auto;line-height:1.6" id="ui-wf-stream-pre">AI正在分析业务流程，生成线框图与规格说明，请稍候…</div>';
   }
+  if (specWrap) specWrap.style.display = 'none';
   try {
     const resp = await fetch('/api/generate-stream', {
       method: 'POST',
@@ -2431,7 +2481,7 @@ async function generateUiWireframeStream() {
     });
     if (!resp.ok) {
       let errMsg = 'HTTP ' + resp.status;
-      try { const e = await resp.json(); errMsg = e.detail || errMsg; } catch {}
+      try { const e = await resp.json(); errMsg = _fmtDetail(e.detail) || errMsg; } catch {}
       throw new Error(errMsg);
     }
     const reader = resp.body.getReader();
@@ -2445,29 +2495,44 @@ async function generateUiWireframeStream() {
       accumulated += chunk;
       if (pre) {
         const display = accumulated.replace(/\n\ndata:.*$/s, '').trim();
-        pre.textContent = display || '正在生成界面线框图代码，请稍候…';
+        pre.textContent = display || 'AI正在生成，请稍候…';
         pre.scrollTop = pre.scrollHeight;
       }
       if (accumulated.includes('data: [DONE]') || accumulated.includes('data: [ERR]')) break;
     }
     accumulated += decoder.decode();
     if (accumulated.includes('data: [ERR]')) {
-      const errMatch = accumulated.match(/data: \[ERR\](\{.+\})/);
-      const errData = errMatch ? JSON.parse(errMatch[1]) : {};
-      throw new Error(errData.__stream_error__ || 'API 返回错误');
+      const m = accumulated.match(/data: \[ERR\](\{[\s\S]+?\})\s*$/);
+      let streamErr = '生成失败，请重试';
+      try { if (m) { const d = JSON.parse(m[1]); streamErr = d.__stream_error__ || streamErr; } } catch {}
+      throw new Error(streamErr);
     }
-    const rawCode = accumulated.replace(/\n\ndata: \[DONE\].*$/s, '').trim();
-    if (!rawCode) { setGenBtnState('ui_wireframe', 'idle'); return; }
-    const cleaned = _cleanMermaidCode(rawCode) || rawCode;
-    await renderUiWireframeDiagram(cleaned);
+    const rawOutput = accumulated.replace(/\n\ndata: \[DONE\].*$/s, '').trim();
+    if (!rawOutput) { setGenBtnState('ui_wireframe', 'idle'); return; }
+
+    // 解析两段内容
+    const { flow, spec } = _parseUiWireframeOutput(rawOutput);
+
+    // 渲染 Mermaid 流程图
+    if (flow) {
+      const cleaned = _cleanMermaidCode(flow) || flow;
+      await renderUiWireframeDiagram(cleaned);
+      currentUiWireframeMermaid = cleaned;
+    } else {
+      if (wrap) wrap.innerHTML = '<div class="diagram-placeholder" style="color:#94a3b8">未生成流程图，但规格说明已就绪 ↓</div>';
+    }
+
+    // 渲染规格说明
+    currentUiWireframeSpec = spec;
+    renderUiWireframeSpec(spec);
+
     setGenBtnState('ui_wireframe', 'done');
-    showToast('🔲 界面线框图已生成');
-    currentUiWireframeMermaid = cleaned;
+    showToast('🔲 线框图与规格说明已生成');
     saveCurrentSession();
   } catch(e) {
     setGenBtnState('ui_wireframe', 'idle');
-    if (wrap) wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">生成失败：' + e.message + '</div>';
-    alert('生成失败：' + e.message);
+    if (wrap) wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">生成失败：' + _fmtErr(e) + '</div>';
+    alert('生成失败：' + _fmtErr(e));
   }
 }
 
@@ -3051,11 +3116,17 @@ function exportWireframeMermaid() {
 }
 
 // ── 线框图（UI Wireframe）导出 ──
-function exportUiWireframePNG() { exportSVGasPNG('ui-wireframe-diagram-wrap', '界面线框图.png').catch(e => alert(e.message)); }
+function exportUiWireframePNG() { exportSVGasPNG('ui-wireframe-diagram-wrap', '业务流程总览图.png').catch(e => alert(e.message)); }
 function exportUiWireframeMermaid() {
   if (!currentUiWireframeMermaid) { alert('请先生成界面线框图'); return; }
-  downloadText(currentUiWireframeMermaid, '界面线框图.mmd');
-  showToast('📝 线框图Mermaid代码已下载');
+  downloadText(currentUiWireframeMermaid, '业务流程图.mmd');
+  showToast('📝 Mermaid代码已下载');
+}
+function exportUiWireframeSpec() {
+  if (!currentUiWireframeSpec) { alert('请先生成界面线框图（规格说明部分）'); return; }
+  const header = `朝曦需求打磨工作台 · 界面线框图规格说明\n生成时间：${new Date().toLocaleString('zh-CN')}\n${'═'.repeat(60)}\n\n`;
+  downloadText(header + currentUiWireframeSpec, '页面规格说明.txt');
+  showToast('📄 规格说明已下载');
 }
 
 // ── 需求梳理 Word 导出 ──
@@ -3458,6 +3529,7 @@ function autoSave() {
     mermaid: currentMermaid,
     wireframeMermaid: currentWireframeMermaid,
     uiWireframeMermaid: currentUiWireframeMermaid,
+    uiWireframeSpec: currentUiWireframeSpec,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     completeness,
     savedAt: new Date().toISOString()
@@ -3521,6 +3593,7 @@ async function loadSession(id) {
           mermaid: d.mermaid || '',
           wireframeMermaid: d.wireframeMermaid || '',
           uiWireframeMermaid: d.uiWireframeMermaid || '',
+          uiWireframeSpec: d.uiWireframeSpec || '',
           prdContent: d.prdContent || '',
           completeness: d.completeness || 0,
           fromServer: true
@@ -3554,6 +3627,7 @@ async function loadSession(id) {
   currentMermaid       = session.mermaid || '';
   currentWireframeMermaid   = session.wireframeMermaid || '';
   currentUiWireframeMermaid = session.uiWireframeMermaid || '';
+  currentUiWireframeSpec    = session.uiWireframeSpec    || '';
   currentSessionId     = session.id;
   setCompleteness(session.completeness || 0);
 
@@ -3600,12 +3674,13 @@ async function loadSession(id) {
     if (wireframeWrap) wireframeWrap.innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮生成功能流程设计图</div>';
   }
 
-  // ⑧ 恢复界面线框图（异步渲染）
+  // ⑧ 恢复界面线框图（异步渲染）+ 规格说明
   if (currentUiWireframeMermaid) {
     renderUiWireframeDiagram(currentUiWireframeMermaid).then(() => setGenBtnState('ui_wireframe', 'done')).catch(() => {});
   } else {
     if (uiWfWrap) uiWfWrap.innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮生成界面线框图</div>';
   }
+  renderUiWireframeSpec(currentUiWireframeSpec);
 
   // ⑨ 恢复 PRD 文档
   const prdContent = session.prdContent || '';
@@ -3654,13 +3729,16 @@ function newSession() {
   currentMermaid = '';
   currentWireframeMermaid = '';
   currentUiWireframeMermaid = '';
+  currentUiWireframeSpec = '';
   currentSessionId = null;
   setCompleteness(0);
   updateStage('opening');
   document.getElementById('messages').innerHTML = '';
   document.getElementById('summary-list').innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求</div>';
   document.getElementById('wireframe-diagram-wrap').innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成功能流程设计图</div>';
-  document.getElementById('ui-wireframe-diagram-wrap').innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成界面线框图</div>';
+  document.getElementById('ui-wireframe-diagram-wrap').innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成业务流程图与页面规格说明</div>';
+  const _uiSpecWrapReset = document.getElementById('ui-wireframe-spec-wrap');
+  if (_uiSpecWrapReset) _uiSpecWrapReset.style.display = 'none';
   document.getElementById('preview-list').innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>每个功能以仿真浏览器界面展示</div>';
   document.getElementById('prd-result-box').style.display = 'none';
   document.getElementById('prd-empty-tip').style.display = 'block';
