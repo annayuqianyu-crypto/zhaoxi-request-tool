@@ -1174,7 +1174,7 @@
             <div class="export-btn-group">
               <button class="exp-btn" onclick="exportPreviewImage()" title="导出页面截图">📷 图片</button>
               <button class="exp-btn" onclick="exportPreviewText()" title="导出文本说明">📄 文本</button>
-              <button class="exp-btn" onclick="exportPreviewCode()" title="导出可运行的HTML原型代码">📝 代码</button>
+              <button class="exp-btn" onclick="exportPreviewCode()" title="AI生成各功能页面的HTML/CSS/JS实现代码">📝 前端代码</button>
             </div>
             <button class="gen-btn" id="gen-preview-btn" onclick="generateSection('preview')">⚡ 生成</button>
           </div>
@@ -3087,10 +3087,46 @@ async function exportPreviewImage() {
       document.head.appendChild(s);
     }).catch(e => { alert(e.message); return Promise.reject(e); });
   }
-  showToast('⏳ 正在截图…');
+  showToast('⏳ 正在生成高清截图…');
   try {
-    const canvas = await html2canvas(container, { backgroundColor:'#f7f8fa', scale:2, useCORS:true, logging:false, scrollX:0, scrollY:0 });
-    canvas.toBlob(blob => { downloadBlob(blob, '页面展示.png'); showToast('📷 页面展示截图已下载'); }, 'image/png');
+    const canvas = await html2canvas(container, {
+      backgroundColor: '#f7f8fa',
+      scale: 3,                      // 3× 高清，避免模糊
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
+      scrollX: 0,
+      scrollY: -window.scrollY,
+      windowWidth: document.documentElement.clientWidth,
+      // onclone：用 getComputedStyle 把 CSS 自定义属性（--navy 等）
+      // 解析为真实颜色值后写入克隆节点，彻底修复 html2canvas 不支持
+      // CSS var() 导致的发白/颜色丢失问题
+      onclone: (_doc, clonedEl) => {
+        const srcNodes = Array.from(container.querySelectorAll('*'));
+        const dstNodes = Array.from(clonedEl.querySelectorAll('*'));
+        const colorProps = [
+          'color', 'backgroundColor',
+          'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
+          'outlineColor', 'textDecorationColor'
+        ];
+        srcNodes.forEach((src, i) => {
+          if (i >= dstNodes.length) return;
+          const cs = window.getComputedStyle(src);
+          colorProps.forEach(p => {
+            const v = cs[p];
+            // 跳过透明和初始值，避免把本该透明的背景覆盖成白色
+            if (v && v !== 'rgba(0, 0, 0, 0)' && v !== 'transparent' && v !== '') {
+              dstNodes[i].style[p] = v;
+            }
+          });
+          // 字体大小 / 粗细也一起写入，防止字体渲染不一致
+          dstNodes[i].style.fontSize   = cs.fontSize;
+          dstNodes[i].style.fontWeight = cs.fontWeight;
+          dstNodes[i].style.lineHeight = cs.lineHeight;
+        });
+      }
+    });
+    canvas.toBlob(blob => { downloadBlob(blob, '页面展示.png'); showToast('📷 页面展示高清截图已下载'); }, 'image/png');
   } catch(e) { alert('截图失败：' + e.message); }
 }
 
@@ -3120,51 +3156,49 @@ function exportPreviewText() {
   showToast('📄 文本说明已下载');
 }
 
-// 导出页面展示原型为独立可运行 HTML 文件
-function exportPreviewCode() {
-  const list = document.getElementById('preview-list');
-  if (!list || !list.querySelector('.page-mock-wrap')) {
-    alert('请先生成页面展示内容'); return;
-  }
-  // 从当前文档的 <style> 块中提取 pm-* / page-mock 相关 CSS 规则
-  let extractedCSS = '';
+// 调用 AI 生成各功能页面的 HTML/CSS/JS 实现代码（流式，避免超时）
+async function exportPreviewCode() {
+  if (!currentRequirements.length) { alert('请先生成页面展示内容'); return; }
+  const btn = document.querySelector('[onclick="exportPreviewCode()"]');
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '生成中…'; btn.disabled = true; }
+  showToast('⏳ AI正在生成前端代码，请稍候（约30秒）…');
   try {
-    Array.from(document.styleSheets).forEach(sheet => {
-      try {
-        Array.from(sheet.cssRules).forEach(rule => {
-          const t = rule.cssText || '';
-          if (t.includes('.pm-') || t.includes('.page-mock') || t.includes(':root')) {
-            extractedCSS += t + '\n';
-          }
-        });
-      } catch {}
+    const resp = await fetch('/api/export/code', {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ history, requirements: currentRequirements })
     });
-  } catch {}
-
-  const now = new Date().toLocaleString('zh-CN');
-  const html = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>页面模拟展示 — 朝曦需求打磨工作台</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f7f8fa; color: #2d3748; }
-    h1 { font-size: 15px; color: #1a365d; margin: 0 0 4px; }
-    .export-meta { font-size: 12px; color: #a0aec0; margin-bottom: 20px; }
-    ${extractedCSS}
-  </style>
-</head>
-<body>
-  <h1>📋 页面模拟展示原型</h1>
-  <div class="export-meta">由朝曦需求打磨工作台生成 · ${now}</div>
-  ${list.innerHTML}
-</body>
-</html>`;
-
-  downloadText(html, '页面展示原型.html');
-  showToast('📝 HTML原型代码已下载');
+    if (!resp.ok) {
+      let errMsg = 'HTTP ' + resp.status;
+      try { const e = await resp.json(); errMsg = e.detail || errMsg; } catch {}
+      throw new Error(errMsg);
+    }
+    // 流式接收
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let accumulated = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      accumulated += decoder.decode(value, { stream: true });
+      if (accumulated.includes('data: [DONE]') || accumulated.includes('data: [ERR]')) break;
+    }
+    accumulated += decoder.decode();
+    if (accumulated.includes('data: [ERR]')) {
+      const m = accumulated.match(/data: \[ERR\](\{.+\})/);
+      const d = m ? JSON.parse(m[1]) : {};
+      throw new Error(d.__stream_error__ || '生成失败');
+    }
+    const code = accumulated.replace(/\n\ndata: \[DONE\].*$/s, '').trim();
+    if (!code) throw new Error('AI 返回内容为空，请重试');
+    downloadText(code, '前端实现代码.html');
+    showToast('📝 前端代码已下载（HTML/CSS/JS 实现）');
+  } catch(e) {
+    alert('代码生成失败：' + e.message);
+  } finally {
+    if (btn) { btn.textContent = origText; btn.disabled = false; }
+  }
 }
 
 // ── PRD Word 导出 ──

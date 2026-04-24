@@ -559,6 +559,79 @@ async def export_doc(req: ExportRequest,
     return {"document": response.choices[0].message.content}
 
 
+@app.post("/api/export/code")
+async def export_frontend_code(req: ExportRequest,
+                                x_api_key: Optional[str] = Header(None),
+                                x_api_url: Optional[str] = Header(None),
+                                x_api_model: Optional[str] = Header(None)):
+    """流式生成各功能页面的 HTML/CSS/JS 实现代码，供 IT 开发人员直接参考"""
+    client_async = _get_async_client(x_api_key, x_api_url)
+    model = _get_model(x_api_model)
+
+    gen_history = _truncate_history(list(req.history), max_pairs=10)
+    history_text = "\n\n".join(
+        f"{'业务方' if m.role == 'user' else '分析师'}：{m.content}"
+        for m in gen_history
+    )
+    req_text = "\n".join(
+        f"【{r.get('module','')} · {r.get('feature','')}】{r.get('description','')}"
+        if isinstance(r, dict) else f"- {r}"
+        for r in req.requirements
+    ) or "（根据访谈记录梳理需求）"
+
+    prompt = f"""根据以下访谈记录和需求清单，为每个功能模块生成对应的前端实现代码。
+
+## 访谈记录
+{history_text}
+
+## 需求清单
+{req_text}
+
+## 输出要求
+1. 输出一个完整的、可直接在浏览器打开的 HTML 文件
+2. 技术栈：原生 HTML5 + CSS3 + JavaScript（不使用外部框架/CDN）
+3. 文件结构：
+   - 顶部：目录索引（锚点链接，点击可跳转到各功能页面）
+   - 每个功能模块用 <section id="feature-N"> 包裹，标注模块名和功能名
+   - 各模块间有分隔线
+4. 每个功能模块的代码必须包含：
+   - 页面标题 + 面包屑导航
+   - 若有查询/筛选：生成 <input>/<select> 筛选控件 + 查询按钮
+   - 若有列表/表格：生成 <table> 含表头和2-3行示例数据
+   - 若有表单：生成 <form> 含对应 <input>/<select>/<textarea> 字段
+   - 操作按钮：提交/保存/取消（带 JS 确认弹窗）
+   - 简单的表单验证 JS（必填项检查）
+5. CSS 风格：简洁现代的企业内网管理系统，使用以下配色：
+   - 主色：#1a365d（深蓝导航）
+   - 辅色：#3182ce（按钮/链接）
+   - 背景：#f7f8fa
+   - 卡片/表单背景：#ffffff，border-radius:8px，box-shadow 轻阴影
+   - 表格：奇偶行交替色 #f9fafb / #ffffff
+6. 只输出完整 HTML 代码，从 <!DOCTYPE html> 开始，不要任何代码块标记或说明文字"""
+
+    async def stream_code():
+        try:
+            stream = await client_async.chat.completions.create(
+                model=model, max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content or ""
+                if delta:
+                    yield delta.encode("utf-8")
+            yield b"\n\ndata: [DONE]"
+        except Exception as e:
+            err = json.dumps({"__stream_error__": str(e)}, ensure_ascii=False)
+            yield f"\n\ndata: [ERR]{err}".encode("utf-8")
+
+    return StreamingResponse(
+        stream_code(),
+        media_type="text/plain; charset=utf-8",
+        headers={"X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/generate")
 async def generate_section(req: GenerateRequest,
                             x_api_key: Optional[str] = Header(None),
