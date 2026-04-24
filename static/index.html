@@ -2558,6 +2558,39 @@ function _injectUiWfTheme(code) {
   return initDir + '\n' + code;
 }
 
+// 判断一个 hex 颜色是否为「深色蓝/深色」（用于识别 AI 乱写的深色 classDef）
+function _isDarkBlueColor(hex) {
+  const m = (hex || '').trim().match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return false;
+  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum < 0.35; // 亮度低于 35% 视为深色
+}
+
+// 渲染后扫描 SVG，把所有深色填充的节点形状强制改为白底黑字黑边
+function _fixUiWfDarkFills(wrap) {
+  if (!wrap) return;
+  // 所有可能有 fill 的形状元素（矩形、菱形多边形、圆、椭圆、路径）
+  const shapes = wrap.querySelectorAll('svg rect, svg polygon, svg circle, svg ellipse, svg path');
+  shapes.forEach(el => {
+    const fill = (el.getAttribute('fill') || '').trim();
+    if (fill && fill !== 'none' && fill !== 'transparent' && _isDarkBlueColor(fill)) {
+      el.setAttribute('fill', '#ffffff');
+    }
+    const stroke = (el.getAttribute('stroke') || '').trim();
+    if (stroke && stroke !== 'none' && _isDarkBlueColor(stroke)) {
+      el.setAttribute('stroke', '#333333');
+    }
+  });
+  // 文字颜色同样修正
+  wrap.querySelectorAll('svg text, svg tspan').forEach(el => {
+    const fill = (el.getAttribute('fill') || '').trim();
+    if (fill && fill !== 'none' && _isDarkBlueColor(fill)) {
+      el.setAttribute('fill', '#000000');
+    }
+  });
+}
+
 async function renderUiWireframeDiagram(code) {
   currentUiWireframeMermaid = code;
   uiWfDiagCounter++;
@@ -2575,6 +2608,8 @@ async function renderUiWireframeDiagram(code) {
       // 两参数形式：Mermaid 内部渲染，不污染 wrap
       const { svg } = await mermaid.render(renderId, attempts[i]);
       wrap.innerHTML = svg;
+      // ── 修正残留的深色节点填充（AI 可能生成 classDef 覆盖主题）──
+      _fixUiWfDarkFills(wrap);
       const s = wrap.querySelector('svg');
       if (!s) { wrap.innerHTML = ''; continue; }
       if (document.body.classList.contains('mobile-mode')) {
@@ -3097,6 +3132,8 @@ async function exportSVGasPNG(wrapId, filename) {
   cloned.setAttribute('width', W);
   cloned.setAttribute('height', H);
   cloned.style.transform = 'none';
+  // 移除 foreignObject：浏览器安全策略会让含 foreignObject 的 SVG 污染 canvas，导致 toBlob 失败
+  cloned.querySelectorAll('foreignObject').forEach(el => el.remove());
 
   const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(cloned);
   const blob   = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
@@ -3105,7 +3142,7 @@ async function exportSVGasPNG(wrapId, filename) {
   await new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const scale = 2;                          // 2× 高清输出
+      const scale = 2;
       const canvas = document.createElement('canvas');
       canvas.width  = W * scale;
       canvas.height = H * scale;
@@ -3115,7 +3152,20 @@ async function exportSVGasPNG(wrapId, filename) {
       ctx.fillRect(0, 0, W, H);
       ctx.drawImage(img, 0, 0, W, H);
       URL.revokeObjectURL(url);
-      canvas.toBlob(pngBlob => { downloadBlob(pngBlob, filename); resolve(); }, 'image/png');
+      // 优先 toBlob；若 canvas 仍被污染则 fallback 到 toDataURL
+      const _dl = (dataUrl) => {
+        const a = document.createElement('a');
+        a.href = dataUrl; a.download = filename; a.click();
+        resolve();
+      };
+      try {
+        canvas.toBlob(pngBlob => {
+          if (pngBlob) { downloadBlob(pngBlob, filename); resolve(); }
+          else { try { _dl(canvas.toDataURL('image/png')); } catch(e2) { reject(e2); } }
+        }, 'image/png');
+      } catch(e) {
+        try { _dl(canvas.toDataURL('image/png')); } catch(e2) { reject(new Error('图片导出失败：' + e2.message)); }
+      }
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG渲染失败，请重试')); };
     img.src = url;
