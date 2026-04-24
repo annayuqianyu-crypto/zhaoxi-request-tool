@@ -1105,6 +1105,7 @@
         <button class="req-subbtn" onclick="switchReqSub('wireframe',this)">📊 流程图</button>
         <button class="req-subbtn" onclick="switchReqSub('preview',this)">🖥️ 页面展示</button>
         <button class="req-subbtn" onclick="switchReqSub('prd',this)">📄 PRD文档</button>
+        <button class="req-subbtn" onclick="switchReqSub('ui-wireframe',this)">🔲 线框图</button>
       </div>
 
       <!-- 📝 需求梳理 -->
@@ -1221,6 +1222,34 @@
         </div>
       </div>
 
+
+      <!-- 🔲 线框图（UI Wireframe） -->
+      <div id="req-sub-ui-wireframe" class="req-sub">
+        <div class="gen-header">
+          <div class="gen-header-left">
+            <span class="gen-icon">🔲</span>
+            <div>
+              <div class="gen-title">界面线框图</div>
+              <div class="gen-subtitle">页面布局 · UI组件 · 跳转关系，IT人员可直接使用</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div class="export-btn-group">
+              <button class="exp-btn" onclick="exportUiWireframePNG()" title="导出PNG图片">📷 图片</button>
+              <button class="exp-btn" onclick="exportUiWireframeMermaid()" title="导出Mermaid代码">📝 代码</button>
+            </div>
+            <button class="diagram-tool-btn" onclick="zoomUiWireframe(0.2)">＋</button>
+            <button class="diagram-tool-btn" onclick="zoomUiWireframe(-0.2)">－</button>
+            <button class="diagram-tool-btn" onclick="resetUiWireframeZoom()">适应</button>
+            <button class="gen-btn" id="gen-ui-wireframe-btn" onclick="generateSection('ui_wireframe')">⚡ 生成</button>
+          </div>
+        </div>
+        <div class="gen-content-wrap" style="padding:12px;">
+          <div id="ui-wireframe-diagram-wrap" style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px;min-height:180px;overflow:auto;">
+            <div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成界面线框图，展示各页面布局与跳转关系<br><span style="font-size:12px;color:#cbd5e0">每个页面对应一个区块，标注核心UI组件与操作按钮</span></div>
+          </div>
+        </div>
+      </div>
 
     </div>
     <!-- Tab 4: Function Definition -->
@@ -1403,6 +1432,8 @@ let history = [];
 let currentMermaid = '';
 let currentRequirements = [];
 let currentWireframeMermaid = '';
+let currentUiWireframeMermaid = '';
+let uiWireframeNativeW = 800, uiWireframeNativeH = 600, uiWireframeScale = 1;
 let completeness = 0;
 let isLoading = false;
 let diagramScale = 1;
@@ -2262,7 +2293,7 @@ function mockCellValue(col, row) {
 // ── 通用生成按钮逻辑 ──
 function setGenBtnState(type, state) {
   // state: 'idle' | 'loading' | 'done'
-  const ids = { summary:'gen-summary-btn', wireframe:'gen-wireframe-btn', preview:'gen-preview-btn', prd:'gen-prd-btn' };
+  const ids = { summary:'gen-summary-btn', wireframe:'gen-wireframe-btn', preview:'gen-preview-btn', prd:'gen-prd-btn', ui_wireframe:'gen-ui-wireframe-btn' };
   const labels = { summary:'⚡ 生成', wireframe:'⚡ 生成', preview:'⚡ 生成', prd:'⚡ 生成' };
   const btn = document.getElementById(ids[type]);
   if (!btn) return;
@@ -2279,9 +2310,12 @@ async function generateSection(type) {
       await generatePRDInline(); return;
     }
 
-    // 流程图（wireframe）使用流式生成，可实时展示代码进度
+    // 流程图和线框图均使用流式生成，可实时展示代码进度
     if (type === 'wireframe') {
       await generateWireframeStream(); return;
+    }
+    if (type === 'ui_wireframe') {
+      await generateUiWireframeStream(); return;
     }
 
     const resp = await fetch('/api/generate', {
@@ -2383,6 +2417,126 @@ async function generateWireframeStream() {
     if (wrap) wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">生成失败：' + e.message + '</div>';
     alert('生成失败：' + e.message);
   }
+}
+
+// ── 线框图（UI Wireframe）流式生成 ──
+async function generateUiWireframeStream() {
+  const wrap = document.getElementById('ui-wireframe-diagram-wrap');
+  if (wrap) {
+    wrap.innerHTML = '<div style="padding:12px 16px;background:#1e293b;border-radius:8px;color:#94a3b8;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:360px;overflow-y:auto;line-height:1.6" id="ui-wf-stream-pre">正在生成界面线框图代码，请稍候…</div>';
+  }
+  try {
+    const resp = await fetch('/api/generate-stream', {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ history, requirements: currentRequirements, type: 'ui_wireframe' })
+    });
+    if (!resp.ok) {
+      let errMsg = 'HTTP ' + resp.status;
+      try { const e = await resp.json(); errMsg = e.detail || errMsg; } catch {}
+      throw new Error(errMsg);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let accumulated = '';
+    const pre = document.getElementById('ui-wf-stream-pre');
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      accumulated += chunk;
+      if (pre) {
+        const display = accumulated.replace(/\n\ndata:.*$/s, '').trim();
+        pre.textContent = display || '正在生成界面线框图代码，请稍候…';
+        pre.scrollTop = pre.scrollHeight;
+      }
+      if (accumulated.includes('data: [DONE]') || accumulated.includes('data: [ERR]')) break;
+    }
+    accumulated += decoder.decode();
+    if (accumulated.includes('data: [ERR]')) {
+      const errMatch = accumulated.match(/data: \[ERR\](\{.+\})/);
+      const errData = errMatch ? JSON.parse(errMatch[1]) : {};
+      throw new Error(errData.__stream_error__ || 'API 返回错误');
+    }
+    const rawCode = accumulated.replace(/\n\ndata: \[DONE\].*$/s, '').trim();
+    if (!rawCode) { setGenBtnState('ui_wireframe', 'idle'); return; }
+    const cleaned = _cleanMermaidCode(rawCode) || rawCode;
+    await renderUiWireframeDiagram(cleaned);
+    setGenBtnState('ui_wireframe', 'done');
+    showToast('🔲 界面线框图已生成');
+    currentUiWireframeMermaid = cleaned;
+    saveCurrentSession();
+  } catch(e) {
+    setGenBtnState('ui_wireframe', 'idle');
+    if (wrap) wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">生成失败：' + e.message + '</div>';
+    alert('生成失败：' + e.message);
+  }
+}
+
+let uiWfDiagCounter = 0;
+async function renderUiWireframeDiagram(code) {
+  currentUiWireframeMermaid = code;
+  uiWfDiagCounter++;
+  const wrap = document.getElementById('ui-wireframe-diagram-wrap');
+  if (!wrap) return;
+  const attempts = [code, _cleanMermaidCode(code)];
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      wrap.innerHTML = '';
+      const renderId = 'mmd-uiwf-' + uiWfDiagCounter + '_a' + i;
+      document.querySelectorAll('#' + renderId + ', [id^="' + renderId + '"]').forEach(el => {
+        if (!wrap.contains(el)) el.remove();
+      });
+      const { svg } = await mermaid.render(renderId, attempts[i], wrap);
+      wrap.innerHTML = svg;
+      const s = wrap.querySelector('svg');
+      if (!s) { wrap.innerHTML = ''; continue; }
+      if (document.body.classList.contains('mobile-mode')) {
+        fitMobileSvg(wrap, s);
+      } else {
+        const vb = s.getAttribute('viewBox');
+        if (vb) {
+          const parts = vb.split(/\s+/);
+          uiWireframeNativeW = parseFloat(parts[2]) || 800;
+          uiWireframeNativeH = parseFloat(parts[3]) || 600;
+        } else {
+          uiWireframeNativeW = s.getBoundingClientRect().width || 800;
+          uiWireframeNativeH = s.getBoundingClientRect().height || 600;
+          if (!s.getAttribute('viewBox')) s.setAttribute('viewBox', `0 0 ${uiWireframeNativeW} ${uiWireframeNativeH}`);
+        }
+        const containerW = wrap.clientWidth || wrap.parentElement?.clientWidth || 800;
+        uiWireframeScale = uiWireframeNativeW > containerW ? containerW / uiWireframeNativeW : 1;
+        s.setAttribute('width',  Math.round(uiWireframeNativeW * uiWireframeScale));
+        s.setAttribute('height', Math.round(uiWireframeNativeH * uiWireframeScale));
+        s.style.display = 'block';
+        wrap.style.minHeight = Math.max(180, Math.round(uiWireframeNativeH * uiWireframeScale) + 32) + 'px';
+      }
+      return;
+    } catch(e) {
+      wrap.innerHTML = '';
+      if (i < attempts.length - 1) continue;
+      wrap.innerHTML = '<div class="diagram-placeholder" style="color:#fc8181">渲染失败，请重新点击「⚡ 生成」</div>';
+    }
+  }
+}
+
+function zoomUiWireframe(delta) {
+  const wrap = document.getElementById('ui-wireframe-diagram-wrap');
+  const s = wrap ? wrap.querySelector('svg') : null;
+  if (!s) return;
+  uiWireframeScale = Math.max(0.2, Math.min(4, uiWireframeScale + delta));
+  s.setAttribute('width',  Math.round(uiWireframeNativeW * uiWireframeScale));
+  s.setAttribute('height', Math.round(uiWireframeNativeH * uiWireframeScale));
+  wrap.style.minHeight = Math.max(180, Math.round(uiWireframeNativeH * uiWireframeScale) + 32) + 'px';
+}
+function resetUiWireframeZoom() {
+  const wrap = document.getElementById('ui-wireframe-diagram-wrap');
+  const s = wrap ? wrap.querySelector('svg') : null;
+  if (!s) return;
+  const containerW = wrap.clientWidth || 800;
+  uiWireframeScale = uiWireframeNativeW > containerW ? containerW / uiWireframeNativeW : 1;
+  s.setAttribute('width',  Math.round(uiWireframeNativeW * uiWireframeScale));
+  s.setAttribute('height', Math.round(uiWireframeNativeH * uiWireframeScale));
 }
 
 function renderSummaryOnly(list) {
@@ -2909,6 +3063,14 @@ function exportWireframeMermaid() {
   showToast('📝 Mermaid代码已下载');
 }
 
+// ── 线框图（UI Wireframe）导出 ──
+function exportUiWireframePNG() { exportSVGasPNG('ui-wireframe-diagram-wrap', '界面线框图.png').catch(e => alert(e.message)); }
+function exportUiWireframeMermaid() {
+  if (!currentUiWireframeMermaid) { alert('请先生成界面线框图'); return; }
+  downloadText(currentUiWireframeMermaid, '界面线框图.mmd');
+  showToast('📝 线框图Mermaid代码已下载');
+}
+
 // ── 需求梳理 Word 导出 ──
 async function exportRequirementsWord() {
   if (!currentRequirements.length) { alert('请先生成需求梳理内容'); return; }
@@ -3230,6 +3392,7 @@ function autoSave() {
     requirements: [...currentRequirements],
     mermaid: currentMermaid,
     wireframeMermaid: currentWireframeMermaid,
+    uiWireframeMermaid: currentUiWireframeMermaid,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     completeness,
     savedAt: new Date().toISOString()
@@ -3251,6 +3414,7 @@ function saveCurrentSession(customName) {
     requirements: [...currentRequirements],
     mermaid: currentMermaid,
     wireframeMermaid: currentWireframeMermaid,
+    uiWireframeMermaid: currentUiWireframeMermaid,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     completeness
   };
@@ -3291,6 +3455,7 @@ async function loadSession(id) {
           requirements: d.requirements || [],
           mermaid: d.mermaid || '',
           wireframeMermaid: d.wireframeMermaid || '',
+          uiWireframeMermaid: d.uiWireframeMermaid || '',
           prdContent: d.prdContent || '',
           completeness: d.completeness || 0,
           fromServer: true
@@ -3322,24 +3487,27 @@ async function loadSession(id) {
   history              = [...(session.history || [])];
   currentRequirements  = [...(session.requirements || [])];
   currentMermaid       = session.mermaid || '';
-  currentWireframeMermaid = session.wireframeMermaid || '';
+  currentWireframeMermaid   = session.wireframeMermaid || '';
+  currentUiWireframeMermaid = session.uiWireframeMermaid || '';
   currentSessionId     = session.id;
   setCompleteness(session.completeness || 0);
 
   // ③ 重置所有生成按钮
-  ['summary', 'wireframe', 'preview', 'prd'].forEach(t => setGenBtnState(t, 'idle'));
+  ['summary', 'wireframe', 'preview', 'prd', 'ui_wireframe'].forEach(t => setGenBtnState(t, 'idle'));
 
   // ④ 清空并重置各内容区
   const _el = id => document.getElementById(id);
   const summaryList    = _el('summary-list');
   const wireframeWrap  = _el('wireframe-diagram-wrap');
+  const uiWfWrap       = _el('ui-wireframe-diagram-wrap');
   const previewList    = _el('preview-list');
   const prdBox         = _el('prd-result-box');
   const prdTip         = _el('prd-empty-tip');
   const prdInline      = _el('prd-inline-content');
 
   if (summaryList)   summaryList.innerHTML   = '<div class="req-empty">历史需求恢复中…</div>';
-  if (wireframeWrap) wireframeWrap.innerHTML = '<div class="diagram-placeholder">历史线框图恢复中…</div>';
+  if (wireframeWrap) wireframeWrap.innerHTML = '<div class="diagram-placeholder">历史流程图恢复中…</div>';
+  if (uiWfWrap)      uiWfWrap.innerHTML      = '<div class="diagram-placeholder">历史线框图恢复中…</div>';
   if (previewList)   previewList.innerHTML   = '<div class="req-empty">历史页面展示恢复中…</div>';
   if (prdBox)  prdBox.style.display  = 'none';
   if (prdTip)  prdTip.style.display  = 'block';
@@ -3360,11 +3528,18 @@ async function loadSession(id) {
     if (summaryList) summaryList.innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求</div>';
   }
 
-  // ⑦ 恢复功能流程设计图（线框图，异步渲染）
+  // ⑦ 恢复功能流程设计图（异步渲染）
   if (currentWireframeMermaid) {
     renderWireframeDiagram(currentWireframeMermaid).then(() => setGenBtnState('wireframe', 'done')).catch(() => {});
   } else {
     if (wireframeWrap) wireframeWrap.innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮生成功能流程设计图</div>';
+  }
+
+  // ⑧ 恢复界面线框图（异步渲染）
+  if (currentUiWireframeMermaid) {
+    renderUiWireframeDiagram(currentUiWireframeMermaid).then(() => setGenBtnState('ui_wireframe', 'done')).catch(() => {});
+  } else {
+    if (uiWfWrap) uiWfWrap.innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮生成界面线框图</div>';
   }
 
   // ⑨ 恢复 PRD 文档
@@ -3413,19 +3588,21 @@ function newSession() {
   currentRequirements = [];
   currentMermaid = '';
   currentWireframeMermaid = '';
+  currentUiWireframeMermaid = '';
   currentSessionId = null;
   setCompleteness(0);
   updateStage('opening');
   document.getElementById('messages').innerHTML = '';
   document.getElementById('summary-list').innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求</div>';
   document.getElementById('wireframe-diagram-wrap').innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成功能流程设计图</div>';
+  document.getElementById('ui-wireframe-diagram-wrap').innerHTML = '<div class="diagram-placeholder">点击「⚡ 生成」按钮<br>AI将生成界面线框图</div>';
   document.getElementById('preview-list').innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>每个功能以仿真浏览器界面展示</div>';
   document.getElementById('prd-result-box').style.display = 'none';
   document.getElementById('prd-empty-tip').style.display = 'block';
   document.getElementById('req-count').textContent = '0';
   updateCurrentSessionLabel('');
   // 重置各生成按钮
-  ['summary','wireframe','preview','prd'].forEach(t => setGenBtnState(t, 'idle'));
+  ['summary','wireframe','preview','prd','ui_wireframe'].forEach(t => setGenBtnState(t, 'idle'));
   // 重新加载开场白
   fetch('/api/init').then(r => r.json()).then(data => applyAIResponse(data, false)).catch(() => {});
   showDesktopOpener();
@@ -4016,6 +4193,7 @@ async function saveToServer(session) {
         history: session.history, requirements: session.requirements,
         mermaid: session.mermaid,
         wireframe_mermaid: session.wireframeMermaid || '',
+        ui_wireframe_mermaid: session.uiWireframeMermaid || '',
         prd_content: session.prdContent || '',
         completeness: session.completeness
       })

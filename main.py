@@ -264,6 +264,7 @@ class SaveSessionRequest(BaseModel):
     requirements: list
     mermaid: str = ""
     wireframe_mermaid: str = ""
+    ui_wireframe_mermaid: str = ""
     prd_content: str = ""
     completeness: int = 0
 
@@ -678,6 +679,47 @@ async def generate_section(req: GenerateRequest,
                     pass
         return {"type": req.type, "requirements": [], "mermaid": ""}
 
+    elif req.type == "ui_wireframe":
+        prompt = f"""根据以下访谈记录，生成供 IT 人员直接使用的界面线框图（UI Wireframe），以 Mermaid flowchart 格式输出。
+
+访谈记录：
+{history_text}
+
+【线框图设计要求】：
+- 识别系统中的主要页面/屏幕（如首页、录入页、详情页、审批页等）
+- 每个页面用 subgraph 表示，subgraph 标签为页面名称
+- subgraph 内用矩形节点列出该页面的核心 UI 区块：
+  * 顶部导航/标题栏：如「返回按钮 + 页面标题 + 操作菜单」
+  * 搜索/筛选区：如「搜索框 + 筛选条件」
+  * 内容区：如「列表卡片 | 表单字段组 | 数据表格」
+  * 操作按钮区：如「[提交] [取消] [新建]」
+- 用 --> 连线表示页面间的跳转，箭头上注明触发动作（如「点击进入」「提交后」）
+- 按照用户实际操作顺序从上到下排列页面
+
+【严格遵守 Mermaid 语法规则】：
+1. 第一行必须是：graph TD
+2. 节点 ID 只用英文字母数字（P1 N1 B1 等），严禁中文或空格作 ID
+3. 节点标签必须用双引号：N1["搜索框 + 状态筛选"]
+4. subgraph 标签用双引号：subgraph "页面名称"
+5. 使用 classDef + class 为不同类型区块着色：
+   classDef nav fill:#1e3a5f,stroke:#2d6a9f,color:#ffffff
+   classDef form fill:#fff3cd,stroke:#f59e0b,color:#92400e
+   classDef list fill:#dbeafe,stroke:#3b82f6,color:#1e40af
+   classDef action fill:#d1fae5,stroke:#10b981,color:#065f46
+   classDef page fill:#f1f5f9,stroke:#94a3b8,color:#334155
+6. 标签内不能出现未转义的英文双引号，用中文标点替代
+7. 只输出 Mermaid 代码，不要任何说明或多余文字"""
+        try:
+            response = client.chat.completions.create(
+                model=model, max_tokens=2500,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        except Exception as e:
+            raise HTTPException(500, f"生成失败：{e}")
+        raw = response.choices[0].message.content
+        cleaned = _clean_mermaid(raw)
+        return {"type": "ui_wireframe", "mermaid": cleaned, "requirements": []}
+
     raise HTTPException(400, "未知生成类型")
 
 
@@ -688,8 +730,8 @@ async def generate_section_stream(req: GenerateRequest,
                                    x_api_model: Optional[str] = Header(None)):
     """流式生成 Mermaid 图表代码（wireframe / flowchart），逐 token 推送到前端。
     前端可实时显示代码文本，收到 [DONE] 后再触发渲染。"""
-    if req.type not in ("wireframe", "flowchart"):
-        raise HTTPException(400, "此接口仅支持 wireframe 和 flowchart 类型")
+    if req.type not in ("wireframe", "flowchart", "ui_wireframe"):
+        raise HTTPException(400, "此接口仅支持 wireframe、flowchart 和 ui_wireframe 类型")
 
     client_async = _get_async_client(x_api_key, x_api_url)
     model = _get_model(x_api_model)
@@ -725,6 +767,35 @@ async def generate_section_stream(req: GenerateRequest,
    class START,END ep
 7. 标签内不能出现未转义的英文双引号，用中文标点替代
 8. 只输出 Mermaid 代码，不要任何说明、注释或多余文字"""
+    elif req.type == "ui_wireframe":
+        prompt = f"""根据以下访谈记录，生成供 IT 人员直接使用的界面线框图（UI Wireframe），以 Mermaid flowchart 格式输出。
+
+访谈记录：
+{history_text}
+
+【线框图设计要求】：
+- 识别系统中的主要页面/屏幕（如首页、录入页、详情页、审批页等）
+- 每个页面用 subgraph 表示，subgraph 标签为页面名称
+- subgraph 内用矩形节点列出该页面的核心 UI 区块：
+  * 顶部导航/标题栏：如「返回按钮 + 页面标题 + 操作菜单」
+  * 搜索/筛选区：如「搜索框 + 筛选条件」
+  * 内容区：如「列表卡片 | 表单字段组 | 数据表格」
+  * 操作按钮区：如「[提交] [取消] [新建]」
+- 用 --> 连线表示页面间的跳转，箭头上注明触发动作（如「点击进入」「提交后」）
+- 按照用户实际操作顺序从上到下排列页面
+
+【严格遵守 Mermaid 语法规则】：
+1. 第一行必须是：graph TD
+2. 节点 ID 只用英文字母数字（P1 N1 B1 等），严禁中文或空格作 ID
+3. 节点标签必须用双引号：N1["搜索框 + 状态筛选"]
+4. subgraph 标签用双引号：subgraph "页面名称"
+5. 使用 classDef + class 为不同类型区块着色：
+   classDef nav fill:#1e3a5f,stroke:#2d6a9f,color:#ffffff
+   classDef form fill:#fff3cd,stroke:#f59e0b,color:#92400e
+   classDef list fill:#dbeafe,stroke:#3b82f6,color:#1e40af
+   classDef action fill:#d1fae5,stroke:#10b981,color:#065f46
+6. 标签内不能出现未转义的英文双引号，用中文标点替代
+7. 只输出 Mermaid 代码，不要任何说明或多余文字"""
     else:
         prompt = f"""根据以下访谈记录，生成一份完整的 Mermaid 业务流程图。
 
@@ -1103,12 +1174,13 @@ async def save_session(req: SaveSessionRequest, authorization: Optional[str] = H
 
     h_json = json.dumps(req.history,      ensure_ascii=False)
     r_json = json.dumps(req.requirements, ensure_ascii=False)
-    # 将 wireframe_mermaid 和 prd_content 打包进 mermaid 列（避免 schema 变更）
-    if req.wireframe_mermaid or req.prd_content:
+    # 将附加字段打包进 mermaid 列（JSON envelope，避免 schema 变更）
+    if req.wireframe_mermaid or req.prd_content or req.ui_wireframe_mermaid:
         mermaid_data = json.dumps({
             "v": 1,
             "flowchart": req.mermaid,
             "wireframe": req.wireframe_mermaid,
+            "ui_wireframe": req.ui_wireframe_mermaid,
             "prd": req.prd_content
         }, ensure_ascii=False)
     else:
@@ -1158,15 +1230,18 @@ async def get_session(session_id: str, authorization: Optional[str] = Header(Non
     if raw_mermaid.startswith('{"v":1'):
         try:
             m = json.loads(raw_mermaid)
-            d["mermaid"]          = m.get("flowchart", "")
-            d["wireframeMermaid"] = m.get("wireframe", "")
-            d["prdContent"]       = m.get("prd", "")
+            d["mermaid"]            = m.get("flowchart", "")
+            d["wireframeMermaid"]   = m.get("wireframe", "")
+            d["uiWireframeMermaid"] = m.get("ui_wireframe", "")
+            d["prdContent"]         = m.get("prd", "")
         except Exception:
-            d["wireframeMermaid"] = ""
-            d["prdContent"]       = ""
+            d["wireframeMermaid"]   = ""
+            d["uiWireframeMermaid"] = ""
+            d["prdContent"]         = ""
     else:
-        d["wireframeMermaid"] = ""
-        d["prdContent"]       = ""
+        d["wireframeMermaid"]   = ""
+        d["uiWireframeMermaid"] = ""
+        d["prdContent"]         = ""
     return d
 
 
@@ -1238,15 +1313,18 @@ async def admin_get_session(session_id: str, authorization: Optional[str] = Head
     if raw_mermaid.startswith('{"v":1'):
         try:
             m = json.loads(raw_mermaid)
-            d["mermaid"]          = m.get("flowchart", "")
-            d["wireframeMermaid"] = m.get("wireframe", "")
-            d["prdContent"]       = m.get("prd", "")
+            d["mermaid"]            = m.get("flowchart", "")
+            d["wireframeMermaid"]   = m.get("wireframe", "")
+            d["uiWireframeMermaid"] = m.get("ui_wireframe", "")
+            d["prdContent"]         = m.get("prd", "")
         except Exception:
-            d["wireframeMermaid"] = ""
-            d["prdContent"]       = ""
+            d["wireframeMermaid"]   = ""
+            d["uiWireframeMermaid"] = ""
+            d["prdContent"]         = ""
     else:
-        d["wireframeMermaid"] = ""
-        d["prdContent"]       = ""
+        d["wireframeMermaid"]   = ""
+        d["uiWireframeMermaid"] = ""
+        d["prdContent"]         = ""
     return d
 
 
