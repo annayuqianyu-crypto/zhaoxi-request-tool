@@ -19,10 +19,10 @@ load_dotenv()
 
 app = FastAPI()
 
-# 默认 AI 配置（从环境变量读取，用户未传入时作为 fallback）
-_DEFAULT_API_KEY = os.environ.get("WOLFAI_API_KEY", "")
-_DEFAULT_API_URL = os.environ.get("WOLFAI_API_URL", "https://wolfai.top/v1")
-_DEFAULT_MODEL   = os.environ.get("WOLFAI_MODEL",   "gpt-4o")
+# 默认 AI 配置（公司统一 DeepSeek 账号；用户在页面填写自己的 Key 时可覆盖）
+_DEFAULT_API_KEY = os.environ.get("WOLFAI_API_KEY", "sk-603a729e51d54a82bf8b8de3e06530b4")
+_DEFAULT_API_URL = os.environ.get("WOLFAI_API_URL", "https://api.deepseek.com")
+_DEFAULT_MODEL   = os.environ.get("WOLFAI_MODEL",   "deepseek-v4-pro")
 
 def _get_client(api_key: Optional[str] = None, api_url: Optional[str] = None) -> OpenAI:
     """根据请求头中的 key/url 创建同步 OpenAI 客户端；未提供则使用环境变量默认值。"""

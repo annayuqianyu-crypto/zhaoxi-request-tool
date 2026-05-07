@@ -626,7 +626,7 @@
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
       <span class="progress-pct" id="progress-pct">0%</span>
     </div>
-    <button class="hdr-btn" onclick="openApiSettings()" title="配置个人 AI API Key 与接口地址">⚙ API设置</button>
+    <button class="hdr-btn" onclick="openApiSettings()" title="公司已预配置 DeepSeek，可直接使用；如需个人账号可在此覆盖">⚙ API设置</button>
     <button class="hdr-btn" onclick="saveCurrentSession(null)" title="保存当前会话进度">💾 保存</button>
     <button class="hdr-btn" onclick="showSessionsPanel()" title="查看所有已保存任务">📋 任务列表</button>
     <button class="hdr-btn hdr-new" onclick="newSession()" title="开始一个全新的需求访谈">➕ 新任务</button>
@@ -1028,23 +1028,29 @@
               <span style="font-size:15px;font-weight:700;color:var(--navy);">API 设置说明</span>
             </div>
             <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-              <div style="font-size:13px;color:#718096;line-height:1.7;">每位用户需在「⚙ API设置」中填写个人凭据：</div>
-              <div style="display:flex;flex-direction:column;gap:8px;">
-                <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
-                  <span style="width:7px;height:7px;border-radius:50%;background:var(--navy);flex-shrink:0;margin-top:5px;"></span>
-                  <span style="color:#2d3748;line-height:1.65;"><strong>接口地址：</strong>AI 服务的 base URL（如 https://api.openai.com/v1）</span>
-                </div>
-                <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
-                  <span style="width:7px;height:7px;border-radius:50%;background:var(--navy);flex-shrink:0;margin-top:5px;"></span>
-                  <span style="color:#2d3748;line-height:1.65;"><strong>API Key：</strong>服务商提供的密钥，本地存储，不上传服务器</span>
-                </div>
-                <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
-                  <span style="width:7px;height:7px;border-radius:50%;background:var(--navy);flex-shrink:0;margin-top:5px;"></span>
-                  <span style="color:#2d3748;line-height:1.65;"><strong>模型名称：</strong>如 gpt-4o、deepseek-v3，可选推荐模型快速填入</span>
+              <div style="display:flex;align-items:flex-start;gap:9px;padding:9px 12px;background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;">
+                <span style="font-size:15px;flex-shrink:0;">✅</span>
+                <div style="font-size:13px;color:#276749;line-height:1.7;">
+                  <strong>公司已预配置 DeepSeek API，直接使用即可，无需任何填写。</strong>
                 </div>
               </div>
-              <div style="padding:8px 12px;background:#ebf8ff;border-radius:6px;font-size:13px;color:#2b6cb0;line-height:1.6;">
-                🔒 Key 仅保存于浏览器本地，换设备需重新填写
+              <div style="font-size:13px;color:#718096;line-height:1.7;">如需使用个人 API 账号，点击顶栏「⚙ API设置」填写后可覆盖：</div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#a0aec0;flex-shrink:0;margin-top:5px;"></span>
+                  <span style="color:#4a5568;line-height:1.65;"><strong>接口地址：</strong>个人 AI 服务 base URL</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#a0aec0;flex-shrink:0;margin-top:5px;"></span>
+                  <span style="color:#4a5568;line-height:1.65;"><strong>API Key：</strong>个人密钥，仅保存于本地浏览器</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#a0aec0;flex-shrink:0;margin-top:5px;"></span>
+                  <span style="color:#4a5568;line-height:1.65;"><strong>模型名称：</strong>如 gpt-4o、deepseek-v3 等</span>
+                </div>
+              </div>
+              <div style="padding:8px 12px;background:#ebf8ff;border-radius:6px;font-size:12px;color:#2b6cb0;line-height:1.6;">
+                💡 留空所有字段 = 自动使用公司 DeepSeek（deepseek-v4-pro）
               </div>
             </div>
           </div>
@@ -1378,17 +1384,24 @@
       <h2 style="margin:0;font-size:16px;font-weight:700;color:var(--navy)">⚙ AI 接口设置</h2>
       <button onclick="closeApiSettings()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#a0aec0;line-height:1;padding:0 4px">✕</button>
     </div>
-    <p style="font-size:12px;color:#718096;margin:0 0 20px;line-height:1.75;background:#f7fafc;border-radius:8px;padding:10px 12px;border:1px solid var(--border)">请填写您自己的 AI API 凭据。设置仅保存在本地浏览器中，不会上传服务器。</p>
+    <!-- 公司默认 API 提示条 -->
+    <div style="display:flex;align-items:flex-start;gap:10px;background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;padding:10px 13px;margin-bottom:16px;">
+      <span style="font-size:16px;flex-shrink:0;">✅</span>
+      <div style="font-size:12px;color:#276749;line-height:1.7;">
+        <strong>公司已预配置 DeepSeek API，可直接使用，无需填写。</strong><br>
+        如需使用个人账号，在下方填写后点击「保存设置」即可覆盖；留空则自动使用公司默认。
+      </div>
+    </div>
     <div style="margin-bottom:14px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API URL <span style="font-weight:400;color:#a0aec0">（选填）</span></label>
-      <input id="api-url-input" type="text" placeholder="请输入 API 接口地址" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API URL <span style="font-weight:400;color:#a0aec0">（选填，留空使用公司默认）</span></label>
+      <input id="api-url-input" type="text" placeholder="留空 = 使用公司 DeepSeek：https://api.deepseek.com" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div style="margin-bottom:16px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API Key <span style="font-weight:400;color:#e53e3e">*必填</span></label>
-      <input id="api-key-input" type="password" placeholder="sk-…" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API Key <span style="font-weight:400;color:#a0aec0">（选填，留空使用公司默认）</span></label>
+      <input id="api-key-input" type="password" placeholder="留空 = 使用公司默认 Key" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div style="margin-bottom:16px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">模型名称 <span style="font-weight:400;color:#a0aec0">（选填，默认 gpt-4o）</span></label>
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">模型名称 <span style="font-weight:400;color:#a0aec0">（选填，留空使用公司默认 deepseek-v4-pro）</span></label>
       <input id="api-model-input" type="text" placeholder="请输入模型名称，或点击下方推荐" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
       <!-- 模型推荐选项 -->
       <div style="margin-top:8px">
