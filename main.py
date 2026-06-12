@@ -1330,7 +1330,10 @@ async def login(req: LoginRequest):
         raise
     except Exception as e:
         print(f"[login] 未捕获异常: {type(e).__name__}: {e}")
-        raise HTTPException(500, f"登录异常: {type(e).__name__}: {str(e)[:200]}")
+        msg = str(e)
+        if "Name or service not known" in msg or "gaierror" in type(e).__name__.lower() or "URLError" in type(e).__name__:
+            raise HTTPException(503, "数据库暂时不可用，请稍后再试（管理员请检查 Supabase 项目是否已暂停）")
+        raise HTTPException(500, f"登录失败，请稍后重试")
 
 
 @app.get("/api/auth/me")
