@@ -254,8 +254,8 @@ class Message(BaseModel):
     content: str
 
 class LoginRequest(BaseModel):
-    name: str
     email: str
+    name: str = ""
 
 class SaveSessionRequest(BaseModel):
     session_id: Optional[str] = None
@@ -1296,11 +1296,9 @@ async def login(req: LoginRequest):
     """邮箱登录（无密码，内部工具）。首次自动注册，老用户直接返回 token。"""
     try:
         email = req.email.strip().lower()
-        name  = req.name.strip()
+        name  = req.name.strip() or email.split("@")[0]
         if not email or "@" not in email:
             raise HTTPException(400, "请输入有效的邮箱地址")
-        if not name:
-            raise HTTPException(400, "请输入您的姓名")
 
         admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
         is_admin = 1 if email == admin_email else 0

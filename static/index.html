@@ -600,11 +600,7 @@
     <div class="login-sub">请使用公司邮箱登录<br>您的会话记录将安全保存在云端，支持跨设备查看</div>
     <div class="login-field">
       <label for="login-email">邮箱地址</label>
-      <input id="login-email" type="email" placeholder="yourname@company.com" onkeydown="if(event.key==='Enter')document.getElementById('login-name').focus()">
-    </div>
-    <div class="login-field">
-      <label for="login-name">姓名（首次登录自动注册）</label>
-      <input id="login-name" type="text" placeholder="您的名字" onkeydown="if(event.key==='Enter')loginUser()">
+      <input id="login-email" type="email" placeholder="yourname@company.com" onkeydown="if(event.key==='Enter')loginUser()">
     </div>
     <div class="login-error" id="login-error"></div>
     <button class="login-btn" id="login-btn" onclick="loginUser()">登录 / 注册</button>
@@ -4440,7 +4436,7 @@ if (document.readyState === 'loading') {
 
 async function loginUser() {
   const email = (document.getElementById('login-email').value || '').trim();
-  const name  = (document.getElementById('login-name').value || '').trim() || email.split('@')[0];
+  const name  = email.split('@')[0];
   const errEl = document.getElementById('login-error');
   const btn   = document.getElementById('login-btn');
   if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; return; }
