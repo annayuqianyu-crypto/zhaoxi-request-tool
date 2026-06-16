@@ -1774,7 +1774,7 @@ async function testApiConnection() {
   const btn = document.getElementById('api-test-btn');
   btn.textContent = '测试中…'; btn.disabled = true;
   const usingCompany = !key;
-  _setTestResult('info', usingCompany ? '🔄 正在测试公司默认 DeepSeek 配置…' : '🔄 正在连接，请稍候…');
+  _setTestResult('info', usingCompany ? '🔄 正在测试公司 Cloudflare 代理配置…' : '🔄 正在连接，请稍候…');
   const h = { 'Content-Type': 'application/json' };
   if (key)   h['X-Api-Key']   = key;
   if (url)   h['X-Api-Url']   = url;

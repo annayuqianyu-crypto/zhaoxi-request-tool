@@ -19,9 +19,9 @@ load_dotenv()
 
 app = FastAPI()
 
-# 默认 AI 配置（公司统一 DeepSeek 账号；用户在页面填写自己的 Key 时可覆盖）
-_DEFAULT_API_KEY = os.environ.get("WOLFAI_API_KEY", "sk-603a729e51d54a82bf8b8de3e06530b4")
-_DEFAULT_API_URL = os.environ.get("WOLFAI_API_URL", "https://api.deepseek.com")
+# 默认 AI 配置（通过 Cloudflare Worker 代理，Key 由 Cloudflare 安全持有）
+_DEFAULT_API_KEY = os.environ.get("WOLFAI_API_KEY", "placeholder")   # Worker 侧持有真实 Key，此处仅占位
+_DEFAULT_API_URL = os.environ.get("WOLFAI_API_URL", "https://zx-request-tool.annayuqianyu.workers.dev")
 _DEFAULT_MODEL   = os.environ.get("WOLFAI_MODEL",   "deepseek-v4-pro")
 
 def _get_client(api_key: Optional[str] = None, api_url: Optional[str] = None) -> OpenAI:
