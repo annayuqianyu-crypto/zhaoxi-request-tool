@@ -4465,6 +4465,7 @@ async function loginUser() {
     document.getElementById('login-modal').classList.remove('open');
     updateUserDisplay();
     showToast('👋 欢迎，' + userInfo.name + '！云端记录已开启');
+    saveSessions([]);  // 清空本地记录，只加载该用户的云端会话
     syncServerSessions();
   } catch(e) {
     errEl.textContent = e.message || '登录失败，请稍后重试';
