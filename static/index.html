@@ -622,7 +622,7 @@
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
       <span class="progress-pct" id="progress-pct">0%</span>
     </div>
-    <button class="hdr-btn" onclick="openApiSettings()" title="公司已预配置 DeepSeek，可直接使用；如需个人账号可在此覆盖">⚙ API设置</button>
+    <button class="hdr-btn" onclick="openApiSettings()" title="配置您的 API Key 和接口地址">⚙ API设置</button>
     <button class="hdr-btn" onclick="saveCurrentSession(null)" title="保存当前会话进度">💾 保存</button>
     <button class="hdr-btn" onclick="showSessionsPanel()" title="查看所有已保存任务">📋 任务列表</button>
     <button class="hdr-btn hdr-new" onclick="newSession()" title="开始一个全新的需求访谈">➕ 新任务</button>
@@ -1024,29 +1024,23 @@
               <span style="font-size:15px;font-weight:700;color:var(--navy);">API 设置说明</span>
             </div>
             <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-              <div style="display:flex;align-items:flex-start;gap:9px;padding:9px 12px;background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;">
-                <span style="font-size:15px;flex-shrink:0;">✅</span>
-                <div style="font-size:13px;color:#276749;line-height:1.7;">
-                  <strong>公司已预配置 DeepSeek API，直接使用即可，无需任何填写。</strong>
-                </div>
-              </div>
-              <div style="font-size:13px;color:#718096;line-height:1.7;">如需使用个人 API 账号，点击顶栏「⚙ API设置」填写后可覆盖：</div>
+              <div style="font-size:13px;color:#718096;line-height:1.7;">点击顶栏「⚙ API设置」填写您自己的 API 信息，浏览器直连 AI 服务：</div>
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
                   <span style="width:7px;height:7px;border-radius:50%;background:#a0aec0;flex-shrink:0;margin-top:5px;"></span>
-                  <span style="color:#4a5568;line-height:1.65;"><strong>接口地址：</strong>个人 AI 服务 base URL</span>
+                  <span style="color:#4a5568;line-height:1.65;"><strong>API Key（必填）：</strong>您的 DeepSeek 或其他兼容服务密钥</span>
                 </div>
                 <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
                   <span style="width:7px;height:7px;border-radius:50%;background:#a0aec0;flex-shrink:0;margin-top:5px;"></span>
-                  <span style="color:#4a5568;line-height:1.65;"><strong>API Key：</strong>个人密钥，仅保存于本地浏览器</span>
+                  <span style="color:#4a5568;line-height:1.65;"><strong>接口地址（选填）：</strong>默认 https://api.deepseek.com</span>
                 </div>
                 <div style="display:flex;gap:8px;align-items:flex-start;font-size:13px;">
                   <span style="width:7px;height:7px;border-radius:50%;background:#a0aec0;flex-shrink:0;margin-top:5px;"></span>
-                  <span style="color:#4a5568;line-height:1.65;"><strong>模型名称：</strong>如 gpt-4o、deepseek-v3 等</span>
+                  <span style="color:#4a5568;line-height:1.65;"><strong>模型名称（选填）：</strong>默认 deepseek-v4-pro</span>
                 </div>
               </div>
               <div style="padding:8px 12px;background:#ebf8ff;border-radius:6px;font-size:12px;color:#2b6cb0;line-height:1.6;">
-                💡 留空所有字段 = 自动使用公司 DeepSeek（deepseek-v4-pro）
+                🔒 Key 仅存在本地浏览器，不会上传到任何服务器
               </div>
             </div>
           </div>
@@ -1078,15 +1072,15 @@
               <div style="display:flex;flex-direction:column;gap:9px;">
                 <div style="display:flex;gap:9px;align-items:flex-start;">
                   <span style="font-size:15px;flex-shrink:0;">✅</span>
-                  <span>使用公司邮箱登录（首次登录自动注册），无需密码</span>
+                  <span>使用邮箱登录，无需密码；姓名自动取邮箱前缀</span>
                 </div>
                 <div style="display:flex;gap:9px;align-items:flex-start;">
-                  <span style="font-size:15px;flex-shrink:0;">☁️</span>
-                  <span>会话保存至云端，支持电脑 / 手机跨设备查看历史记录</span>
+                  <span style="font-size:15px;flex-shrink:0;">💾</span>
+                  <span>会话保存在本地浏览器，换设备或清除缓存后不可恢复</span>
                 </div>
                 <div style="display:flex;gap:9px;align-items:flex-start;">
                   <span style="font-size:15px;flex-shrink:0;">👁️</span>
-                  <span>访客身份可体验全功能，但会话仅保存在本地浏览器中</span>
+                  <span>访客身份可体验全功能，会话同样保存在本地浏览器中</span>
                 </div>
                 <div style="display:flex;gap:9px;align-items:flex-start;">
                   <span style="font-size:15px;flex-shrink:0;">📋</span>
@@ -1380,25 +1374,24 @@
       <h2 style="margin:0;font-size:16px;font-weight:700;color:var(--navy)">⚙ AI 接口设置</h2>
       <button onclick="closeApiSettings()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#a0aec0;line-height:1;padding:0 4px">✕</button>
     </div>
-    <!-- 公司默认 API 提示条 -->
-    <div style="display:flex;align-items:flex-start;gap:10px;background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;padding:10px 13px;margin-bottom:16px;">
-      <span style="font-size:16px;flex-shrink:0;">✅</span>
-      <div style="font-size:12px;color:#276749;line-height:1.7;">
-        <strong>公司已预配置 DeepSeek API，可直接使用，无需填写。</strong><br>
-        如需使用个人账号，在下方填写后点击「保存设置」即可覆盖；留空则自动使用公司默认。
+    <div style="display:flex;align-items:flex-start;gap:10px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:8px;padding:10px 13px;margin-bottom:16px;">
+      <span style="font-size:16px;flex-shrink:0;">💡</span>
+      <div style="font-size:12px;color:#2b6cb0;line-height:1.7;">
+        填写您自己的 API Key 即可直连 DeepSeek（或其他兼容 OpenAI 格式的服务）。<br>
+        Key 仅保存在本地浏览器，不会上传到任何服务器。
       </div>
     </div>
     <div style="margin-bottom:14px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API URL <span style="font-weight:400;color:#a0aec0">（选填，留空使用公司默认）</span></label>
-      <input id="api-url-input" type="text" placeholder="留空 = 使用公司 DeepSeek：https://api.deepseek.com" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API URL <span style="font-weight:400;color:#a0aec0">（选填，默认 https://api.deepseek.com）</span></label>
+      <input id="api-url-input" type="text" placeholder="默认：https://api.deepseek.com" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div style="margin-bottom:16px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API Key <span style="font-weight:400;color:#a0aec0">（选填，留空使用公司默认）</span></label>
-      <input id="api-key-input" type="password" placeholder="留空 = 使用公司默认 Key" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">API Key <span style="font-weight:400;color:#e53e3e">（必填）</span></label>
+      <input id="api-key-input" type="password" placeholder="请输入您的 API Key" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <div style="margin-bottom:16px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">模型名称 <span style="font-weight:400;color:#a0aec0">（选填，留空使用公司默认 deepseek-v4-pro）</span></label>
-      <input id="api-model-input" type="text" placeholder="留空 = 使用公司默认 deepseek-v4-pro" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+      <label style="display:block;font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">模型名称 <span style="font-weight:400;color:#a0aec0">（选填，默认 deepseek-v4-pro）</span></label>
+      <input id="api-model-input" type="text" placeholder="默认：deepseek-v4-pro" style="width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;transition:border-color .2s" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
     </div>
     <!-- 连通性测试结果 -->
     <div id="api-test-result" style="display:none;margin-bottom:14px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6"></div>
@@ -1442,22 +1435,19 @@ let diagramScale = 1;
 let attachedFile = null;  // { filename, extracted_text }
 let currentSessionId = null;  // 当前会话 ID
 
-// ── Cloudflare Worker 端点（全部 API 经此代理）──
-const WORKER_URL = 'https://zx-request-tool.annayuqianyu.workers.dev';
-
 // 取用户配置的模型或默认
 function _aiModel() {
   return localStorage.getItem('wolfai_api_model') || 'deepseek-v4-pro';
 }
 
-// 取用户配置的 Worker/API 地址（留空用公司默认）
+// 取用户配置的 API 地址（留空默认 DeepSeek 官方）
 function _aiEndpoint() {
-  return (localStorage.getItem('wolfai_api_url') || '').trim() || WORKER_URL;
+  return (localStorage.getItem('wolfai_api_url') || '').trim() || 'https://api.deepseek.com';
 }
 
-// 取用户配置的 API Key（留空时 Worker 自持有 Key）
+// 取用户配置的 API Key
 function _aiKey() {
-  return (localStorage.getItem('wolfai_api_key') || '').trim() || 'company-default';
+  return (localStorage.getItem('wolfai_api_key') || '').trim();
 }
 
 // 格式化历史为访谈文本（供 prompt 用）
@@ -1469,8 +1459,10 @@ function _buildHistoryText(hist) {
 
 // 非流式 AI 调用 → 返回 content 字符串
 async function _callAI(messages, maxTokens = 3000) {
+  const key = _aiKey();
+  if (!key) { openApiSettings(); throw new Error('请先在 API 设置中填写您的 API Key'); }
   const endpoint = _aiEndpoint();
-  const url = endpoint.includes('workers.dev') ? endpoint : endpoint + '/v1/chat/completions';
+  const url = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/$/, '') + '/v1/chat/completions';
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _aiKey() },
@@ -1487,8 +1479,10 @@ async function _callAI(messages, maxTokens = 3000) {
 
 // 流式 AI 调用 → 逐块调用 onChunk(text)，结束后返回完整文本
 async function _callAIStream(messages, maxTokens, onChunk) {
+  const key = _aiKey();
+  if (!key) { openApiSettings(); throw new Error('请先在 API 设置中填写您的 API Key'); }
   const endpoint = _aiEndpoint();
-  const url = endpoint.includes('workers.dev') ? endpoint : endpoint + '/v1/chat/completions';
+  const url = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/$/, '') + '/v1/chat/completions';
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _aiKey() },
@@ -1839,28 +1833,22 @@ async function testApiConnection() {
   const key   = document.getElementById('api-key-input').value.trim();
   const url   = document.getElementById('api-url-input').value.trim();
   const model = document.getElementById('api-model-input').value.trim();
-  // 留空时走服务器端公司默认配置，无需在前端校验
+  // 取当前表单中填写的值（未保存）
   const btn = document.getElementById('api-test-btn');
   btn.textContent = '测试中…'; btn.disabled = true;
-  const usingCompany = !key;
-  _setTestResult('info', usingCompany ? '🔄 正在测试公司 Cloudflare 代理配置…' : '🔄 正在连接，请稍候…');
-  const h = { 'Content-Type': 'application/json' };
-  if (key)   h['X-Api-Key']   = key;
-  if (url)   h['X-Api-Url']   = url;
-  if (model) h['X-Api-Model'] = model;
+  if (!key) { _setTestResult('err', '❌ 请先填写 API Key'); btn.textContent = '🔌 测试连通性'; btn.disabled = false; return; }
+  _setTestResult('info', '🔄 正在连接，请稍候…');
   const t0 = Date.now();
   try {
-    const testEndpoint = (url || WORKER_URL);
-    const testUrl = testEndpoint.includes('workers.dev') ? testEndpoint : testEndpoint + '/v1/chat/completions';
-    const testResp = await fetch(testUrl, {
+    const testEndpoint = (url || 'https://api.deepseek.com').replace(/\/v1\/chat\/completions$/, '').replace(/\/$/, '');
+    const testResp = await fetch(testEndpoint + '/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (key || 'company-default') },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
       body: JSON.stringify({ model: model || 'deepseek-v4-pro', messages: [{ role: 'user', content: 'hi' }], max_tokens: 5, stream: false })
     });
     const ms = Date.now() - t0;
     if (testResp.ok) {
-      const src = usingCompany ? '公司 Cloudflare 代理' : '个人配置';
-      _setTestResult('ok', `✅ 连接成功（${src}）！响应时长 ${ms}ms`);
+      _setTestResult('ok', `✅ 连接成功！响应时长 ${ms}ms`);
     } else {
       const errData = await testResp.json().catch(() => ({}));
       _setTestResult('err', '❌ ' + (errData.error?.message || `HTTP ${testResp.status}`));
@@ -3965,18 +3953,9 @@ function newSession() {
   showToast('➕ 新任务已开始');
 }
 
-async function deleteSession(id, e) {
+function deleteSession(id, e) {
   e.stopPropagation();
   if (!confirm('确认删除此会话？删除后无法恢复。')) return;
-  // 同步删除云端（登录用户）
-  if (userToken) {
-    try {
-      await fetch(`/api/sessions/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': 'Bearer ' + userToken }
-      });
-    } catch {}
-  }
   const sessions = getSessions().filter(s => s.id !== id);
   saveSessions(sessions);
   if (currentSessionId === id) { currentSessionId = null; updateCurrentSessionLabel(''); }
@@ -4443,34 +4422,21 @@ if (document.readyState === 'loading') {
 
 // userToken / userInfo 已在脚本顶部声明
 
-async function loginUser() {
+function loginUser() {
   const email = (document.getElementById('login-email').value || '').trim();
-  const name  = email.split('@')[0];
   const errEl = document.getElementById('login-error');
-  const btn   = document.getElementById('login-btn');
   if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; return; }
   errEl.textContent = '';
-  btn.disabled = true; btn.textContent = '登录中…';
-  try {
-    const resp = await fetch(WORKER_URL + '/api/auth/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name })
-    });
-    await _checkResp(resp);
-    const data = await resp.json();
-    userToken = data.token;
-    userInfo  = data.user;
-    localStorage.setItem('zhaoxi_token', userToken);
-    localStorage.setItem('zhaoxi_user', JSON.stringify(userInfo));
-    document.getElementById('login-modal').classList.remove('open');
-    updateUserDisplay();
-    showToast('👋 欢迎，' + userInfo.name + '！云端记录已开启');
-    saveSessions([]);  // 清空本地记录，只加载该用户的云端会话
-    syncServerSessions();
-  } catch(e) {
-    errEl.textContent = e.message || '登录失败，请稍后重试';
-    btn.disabled = false; btn.textContent = '登录 / 注册';
-  }
+  const name = email.split('@')[0];
+  const prevUser = userInfo;
+  userInfo  = { email, name };
+  userToken = 'local_' + Date.now();
+  if (prevUser && prevUser.email !== email) saveSessions([]);
+  localStorage.setItem('zhaoxi_token', userToken);
+  localStorage.setItem('zhaoxi_user', JSON.stringify(userInfo));
+  document.getElementById('login-modal').classList.remove('open');
+  updateUserDisplay();
+  showToast('👋 欢迎，' + name + '！');
 }
 
 function skipLogin() {
@@ -4481,10 +4447,6 @@ function skipLogin() {
 function tryAutoLogin() {
   if (userToken && userInfo) {
     updateUserDisplay();
-    // 静默验证 token 有效性
-    fetch(WORKER_URL + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + userToken } })
-      .then(r => { if (!r.ok) { userToken=null; userInfo=null; localStorage.removeItem('zhaoxi_token'); localStorage.removeItem('zhaoxi_user'); updateUserDisplay(); } else { syncServerSessions(); } })
-      .catch(() => {});
   }
 }
 
@@ -4508,54 +4470,9 @@ function logoutUser() {
   showToast('已退出登录');
 }
 
-// ── 服务端会话同步 ──
-async function syncServerSessions() {
-  if (!userToken) return;
-  try {
-    const resp = await fetch(WORKER_URL + '/api/sessions', { headers: { 'Authorization': 'Bearer ' + userToken } });
-    if (!resp.ok) return;
-    const data = await resp.json();
-    const local = getSessions();
-    const localMap = new Map(local.map(s => [s.id, s]));
-    let newCount = 0;
-    for (const s of (Array.isArray(data) ? data : (data.sessions || []))) {
-      const serverEntry = {
-        id: s.id, name: s.title || '云端会话', savedAt: s.updated_at,
-        completeness: s.completeness || 0, fromServer: true,
-        // 内容为空壳，点击时懒加载
-        history: [], requirements: [], mermaid: '', wireframeMermaid: '', prdContent: ''
-      };
-      if (!localMap.has(s.id)) {
-        local.unshift(serverEntry);
-        newCount++;
-      } else {
-        // 更新元数据（名称、时间、完成度），但不覆盖本地已有的完整内容
-        const existing = localMap.get(s.id);
-        existing.name = s.title || existing.name;
-        existing.savedAt = s.updated_at;
-        existing.completeness = s.completeness || existing.completeness;
-        existing.fromServer = true;
-      }
-    }
-    saveSessions(local);
-    if (document.getElementById('sessions-modal').classList.contains('open')) renderSessionsList();
-    if (newCount > 0) showToast('☁️ 已同步 ' + newCount + ' 条新云端记录');
-  } catch {}
-}
-
-async function saveToServer(session) {
-  if (!userToken) return;
-  try {
-    await fetch(WORKER_URL + '/api/sessions/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + userToken },
-      body: JSON.stringify({
-        session_id: session.id, title: session.name,
-        history: session.history
-      })
-    });
-  } catch {}
-}
+// ── 会话仅本地存储，无服务端同步 ──
+async function syncServerSessions() { return; }
+async function saveToServer(session) { return; }
 </script>
 </body>
 </html>
