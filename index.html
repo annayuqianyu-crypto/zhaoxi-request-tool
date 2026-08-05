@@ -642,7 +642,7 @@
     <div id="messages"></div>
     <!-- Desktop opening scene picker -->
     <div id="desktop-opener">
-      <div class="dop-label">选择您的业务场景快速开始：</div>
+      <div class="dop-label">或从这些常见情境开始（点击后可自行修改）：</div>
       <div class="dop-grid" id="dop-grid"></div>
     </div>
     <div id="attach-chips"></div>
@@ -1434,6 +1434,12 @@ let isLoading = false;
 let diagramScale = 1;
 let attachedFile = null;  // { filename, extracted_text }
 let currentSessionId = null;  // 当前会话 ID
+let currentConfirmed = null;  // 八大维度已确认信息（记忆锚点，见 _buildSystemPrompt）
+
+// 需求访谈的八大维度。既是追问清单，也是完整度的评分锚点（每个 12.5 分）。
+// 必须声明在此处：开场白 applyAIResponse(LOCAL_OPENING) 在脚本中段就会执行，
+// 若 DIMENSIONS 声明在其之后，将来任何触及它的改动都会在页面加载时抛 TDZ 错误。
+const DIMENSIONS = ['角色权限','触发条件','输入数据','处理流程','审批链路','输出结果','异常处理','合规要求'];
 
 // 取用户配置的模型或默认
 function _aiModel() {
@@ -1526,46 +1532,46 @@ let userInfo = (function() {
 // ── Grill-Me 快捷回复卡片（必须在最顶部声明，避免 TDZ 报错）──
 const GRILL_CHIPS = {
   opening: {
-    label: '选择您的业务场景快速开始：',
+    label: '或从这些常见情境开始（点击后可自行修改）：',
     categories: [
       { title: '数据类', chips: [
-        { label: '客户KYC数据管理', template: '我们目前用Excel管理客户KYC信息，数据分散、更新不及时，希望做一个统一的客户档案平台，支持信息录入、合规审核和定期复核提醒。' },
-        { label: '股东持仓台账',    template: '公司股东结构比较复杂，持仓和变动记录靠人工维护，想建一个台账系统来追踪每位股东的持股比例、历史变动和相关文件。' },
-        { label: '家族信托数据归集', template: '我们管理多个家族信托架构，资产散落在不同账户和机构，想把所有数据归集到一个平台，实现统一查看和定期对账。' }
+        { label: '客户KYC数据管理', template: '上个月合规检查，让我提供某位客户三年前的KYC资料，我在三个同事的电脑里翻了两天才凑齐，还有两份签字页至今没找到。这种检查每季度都要来一次。' },
+        { label: '股东持仓台账',    template: '上周股东要看自己的持股变动记录，我从2019年的邮件附件里一份份翻Excel，对了一下午才对上数，中间还发现有两次变更压根没登记。' },
+        { label: '家族信托数据归集', template: '季度对账的时候，一个家族的资产分散在四家机构，我要分别找四个对接人要报表，格式还都不一样，光整理成一张表就花了三天。' }
       ]},
       { title: '流程类', chips: [
-        { label: '合同多级审批流', template: '公司合同审批需要经过多个部门层级，目前靠邮件传递容易出错、进度不透明，想做一套线上多级审批系统，能追踪每个环节的状态。' },
-        { label: '客户准入审核',   template: '新客户入职需要完成背景调查、合规审查等多个步骤，目前流程不统一，想把整个准入流程标准化、线上化，并留存完整的审核记录。' },
-        { label: '跨部门协作工单', template: '各部门之间的协作任务目前没有统一管理，经常遗漏或责任不清，想做一个工单系统来创建任务、指派负责人、跟踪进度和催办。' }
+        { label: '合同多级审批流', template: '上周一份合同要过法务、财务、分管领导三关，我把邮件发出去就没了下文，追到第四天才发现卡在财务那儿——经办人休假了，没人接手。' },
+        { label: '客户准入审核',   template: '新客户进来要做背调、查名单、填风险问卷，每个人的习惯都不一样。上次审计抽查发现有三个客户漏了一个环节，我们连是谁经手的都查不出来。' },
+        { label: '跨部门协作工单', template: '一个客户的事要税务和法务一起出方案，我在微信群里@了两边，结果两边都以为对方在跟进，拖了一周客户打电话来催我才发现。' }
       ]},
       { title: '合同类', chips: [
-        { label: '合同起草与审批', template: '我们每月要起草大量合同，希望有模板库可以快速套用，同时支持在线批注、多方审批和电子签署，全流程留痕。' },
-        { label: '合同到期提醒',   template: '公司有很多长期合同，经常忘记到期日或续签节点，希望系统能在关键时间节点前自动提醒对应负责人，避免遗漏。' },
-        { label: '合同变更管理',   template: '合同执行过程中经常发生变更，想记录每次变更的内容、原因和审批记录，形成完整的合同生命周期档案，便于后续审计查阅。' }
+        { label: '合同起草与审批', template: '每次起草合同我都是翻出上一份类似的改，上个月改漏了一处主体名称，等签完字才发现，只能作废重新走一遍流程。' },
+        { label: '合同到期提醒',   template: '去年有份服务协议到期了没人注意，等客户问起来才发现已经过期两个月，中间那段时间等于是在无合同状态下提供服务。' },
+        { label: '合同变更管理',   template: '一份合同前后补了三次补充协议，等到要执行的时候，没人说得清最终该以哪一版为准，翻邮件翻了大半天。' }
       ]},
       { title: '报告类', chips: [
-        { label: 'ESG合规报告',  template: '公司需要定期出具ESG报告，目前数据收集分散、整理耗时，希望能自动汇总各部门数据，按监管或披露标准生成结构化报告。' },
-        { label: '税务申报汇总', template: '我们有多个主体需要定期申报税务，数据整理很繁琐，想做一个系统来归集各主体的涉税数据，自动生成申报所需的汇总表格。' },
-        { label: '监管定期报送', template: '我们需要定期向监管机构报送指定格式的数据，目前手工整理耗时且容易出错，希望系统能自动拉取数据并生成符合要求的报送文件。' }
+        { label: 'ESG合规报告',  template: '做年度ESG报告时我要向六个部门要数据，催了两周才收齐，拿到手发现口径还不一致，最后自己又重新核了一遍。' },
+        { label: '税务申报汇总', template: '每个季度末我要给八个主体做申报，数据分散在不同账套里，光整理汇总表就要两天。去年还因为漏了一个主体，被罚了滞纳金。' },
+        { label: '监管定期报送', template: '上次报送前一天才发现取数口径变了，整套表全部重做，加班到半夜才交上去。这个报表每个月都要报一次。' }
       ]},
       { title: '方案类', chips: [
-        { label: '股东减持方案', template: '公司近期有股东计划减持，需要结合税务筹划、锁定期和合规要求制定减持方案，希望有一个系统来管理方案版本、审批和执行进度。' },
-        { label: '家族财富规划', template: '我们需要为高净值客户制定个性化的财富传承方案，涉及信托、保险、境外架构等多种工具，希望有个平台来管理方案、更新和客户沟通记录。' },
-        { label: '境外投资合规', template: '公司在多个境外地区有投资布局，各司法管辖区合规要求不同，希望建一个合规管理平台来追踪各地要求、申报节点和风险预警。' }
+        { label: '股东减持方案', template: '上周客户问减持方案，我要同时考虑锁定期、税负和市场窗口，跟法务税务来回确认了三轮，方案改了五版，最后客户还问我哪一版是最新的。' },
+        { label: '家族财富规划', template: '给一个家族做传承方案，涉及信托、保险和境外架构，前后跟客户沟通了两个月，中间的调整记录散在邮件和微信里，新同事接手完全看不懂。' },
+        { label: '境外投资合规', template: '客户在三个地区有投资，每个地方的申报节点都不一样。上次差点漏掉一个地区的年度申报，还是对方律所提醒我们才想起来。' }
       ]}
     ]
   },
   exploring: {
-    label: '常见补充描述：',
-    chips: ['目前用Excel手动处理','需要多级审批流','数据要跨部门共享','涉及境外合规要求','需要自动生成报告','希望移动端可用']
+    label: '常见补充（点击填入，可继续修改）：',
+    chips: ['目前全靠人工和Excel','这件事每周都会发生','要跨部门一起处理','涉及境外合规要求','出问题过，有过教训','希望手机上也能用']
   },
   drilling: {
-    label: '追问回应：',
-    chips: ['理解正确，继续','补充一个特殊情况','审批层级再说明下','还有其他使用角色','这个数据来自CRM','有时限要求']
+    label: '回应追问：',
+    chips: ['理解正确，请继续','这里有个例外情况','我再说明下审批层级','还有别的角色会用','数据来自另一个系统','有明确的时限要求','这个我也不确定']
   },
   summarizing: {
-    label: '确认与调整：',
-    chips: ['需求描述准确','需要微调某一项','可以开始整理文档','再补充一个场景','优先级需要排序']
+    label: '确认与收尾：',
+    chips: ['理解准确，可以了','有一处需要修正','可以开始生成文档','我再补充一个场景','帮我排一下优先级']
   }
 };
 
@@ -1599,7 +1605,7 @@ mermaid.initialize({
 
 // 本地开场白（与后端 OPENING_MESSAGE 保持一致，无需网络即可立刻初始化）
 const LOCAL_OPENING = {
-  message: '您好！我是朝曦的业务需求分析助手，熟悉家族财富架构、全球税务规划、资本市场服务、法律咨询和企业治理五大业务体系。\n\n**我的工作方式：** 通过深度访谈把模糊想法变成清晰的IT需求，对话结束后点击右侧各板块的「⚡ 生成」按钮，可一键生成需求梳理、流程图、线框图和PRD文档，最终可直接交付IT团队。\n\n**请按以下框架描述您的场景**（能说多少说多少，其余我来追问）：\n\n🏢 **所在部门**：哪个业务条线或岗位会使用这个系统？\n　　（如：税务团队 / 架构师团队 / 资本市场组 / 客服中台）\n😣 **业务痛点**：目前这件事最大的困难或效率瓶颈是什么？\n🎯 **期望解决**：您希望系统能帮您做到什么，达到什么效果？\n📥 **涉及输入**：需要录入或上传哪些信息？数据从哪里来？\n📤 **期望输出**：系统最终要产出什么？发给谁？存在哪里？\n\n您也可以直接上传相关文件（Word/Excel/PPT）或使用 🎤 语音描述，我会帮您提炼需求。',
+  message: '您好！我是朝曦的业务需求分析助手，熟悉家族财富架构、全球税务规划、资本市场服务、法律咨询和企业治理五大业务体系。\n\n**我的工作方式：** 我不会一上来问您"想要什么功能"——那很难答。我会请您讲一段真实经历，再由我逐层追问，把它变成 IT 能直接开发的需求。聊清楚后点击右侧「⚡ 生成」，即可产出需求梳理、流程图、线框图和 PRD 文档。\n\n**请先讲一个具体的故事**（不用完整，想到哪说到哪）：\n\n　• 最近一次遇到这件事，是什么情况？\n　• 您具体做了哪些步骤？卡在了哪一步？\n　• 这种情况多久发生一次？\n\n**举个例子：** "上周三客户要减持，我得先找法务确认锁定期，再让税务测算，三个人在微信里来回问了两天，最后 Excel 还是算错了一版。"\n\n越具体越好——**时间、人、数字、卡在哪**，都是我能用上的线索。您也可以上传相关文件（Word/Excel/PPT）或用 🎤 语音描述。',
   stage: 'opening',
   completeness: 0
 };
@@ -1608,6 +1614,81 @@ window.addEventListener('DOMContentLoaded', () => {
   // 直接用本地开场白初始化，无需网络，刷新/首次加载均稳定
   applyAIResponse(LOCAL_OPENING, false);
 });
+
+// ══════════════════════════════════════════
+// ── 访谈提示词与八大维度 ──
+// ══════════════════════════════════════════
+
+const SYSTEM_PROMPT_BASE = `你是朝曦金融机构高端客户增值服务平台的资深业务分析师。
+
+## 业务背景
+朝曦五大服务体系：家族财富架构（境内外信托、资本市场投融资、全球资产配置、股权激励）｜全球税务规划（美/加/新加坡税务合规、上市公司股东减持税务、跨境架构涉税、CRS/FATCA）｜全球法律咨询（资本金融、公司商事、婚姻家事、企业合规、不良资产处置）｜资本市场服务（股东减持、股东融资退出、拟上市架构、私募基金架构）｜企业治理（ESG合规、组织效能、股权激励体系、接班人规划）
+五大客群：上市公司股东、新兴/传统企业家、国际化人士（美/加/澳/英）、企业家太太、高净值家族。
+
+任务：通过深度访谈，把业务团队模糊的想法转化为清晰、可落地的 IT 系统需求。
+
+## 访谈方法论
+
+### 第一步：场景剧本破冰
+绝不要直接问"你要什么功能"——业务方答不上来。请他讲一个真实工作故事：
+"请描述最近您或同事实际遇到的一个具体情境，就像讲故事一样。"
+从故事叙述中提炼功能要求，而不是让对方自己设计系统。
+
+### 第二步：八大维度结构化深挖
+每轮只挑【当前最不清晰、且对最终方案影响最大】的一个维度追问：
+
+- 【角色权限】谁在用？什么职级？权限边界在哪？
+- 【触发条件】什么情况下启动这件事？多久发生一次？
+- 【输入数据】需要哪些信息？从哪里来？什么格式？
+- 【处理流程】每个步骤是什么？分别谁来操作？
+- 【审批链路】谁审批？几级？有无时限要求？
+- 【输出结果】最终产出什么？发给谁？存在哪里？
+- 【异常处理】出错或遇到特殊情况怎么办？
+- 【合规要求】哪些监管规定或内部制度必须遵守？
+
+### 领域专项追问（识别到对应领域时补问）
+- 税务场景：申报期限、税种、纳税主体、税务机关对接方式、凭证留存年限
+- 法律场景：合同类型、审阅层级、印章管控、律师介入时机、诉讼风险分级
+- 资本市场：交易品种、风控限额、监管报送、估值方式、结算周期
+
+## 追问原则
+1. 每次只问一个问题，绝不连问
+2. 先用一句话复述你对上一轮回答的理解，再提下一个问题，让对方有机会纠错
+3. 不接受模糊回答：听到"大概""差不多""应该"时，追问具体数字或实例
+4. **绝不重复追问【已确认信息】中已有答案的维度**，直接问还空着的
+5. 全程使用中文，语气专业但不生硬，不要说教
+
+## 阶段判定（stage）
+- opening：还没听到具体业务场景
+- exploring：已听到场景，正在摸清整体轮廓（已确认 1–3 个维度）
+- drilling：轮廓清楚，正在逐维度深挖细节（已确认 4–6 个维度）
+- summarizing：八大维度基本齐备（≥7 个），开始复述确认并收尾
+
+## 输出格式
+只输出 JSON，不要任何其他文字，不要代码块围栏。**message 字段必须排在最前面。**
+
+{"message":"复述理解 + 下一个追问问题","stage":"opening|exploring|drilling|summarizing","confirmed":{"角色权限":"","触发条件":"","输入数据":"","处理流程":"","审批链路":"","输出结果":"","异常处理":"","合规要求":""}}
+
+confirmed 填写规则：
+- 八个键必须全部保留且顺序固定
+- 已问清楚的维度：填一句话摘要，不超过 40 字
+- 还没问清楚的维度：填空字符串 ""
+- **每轮都要输出完整的 confirmed**，把此前已确认的内容原样带上，绝不能遗漏或省略`;
+
+/** 把已确认信息拼进系统提示词——历史被截断到 8 条后，靠这个锚点保住上下文 */
+function _buildSystemPrompt() {
+  const c = currentConfirmed;
+  if (!c || typeof c !== 'object') return SYSTEM_PROMPT_BASE;
+  const filled = DIMENSIONS.filter(d => (c[d] || '').toString().trim());
+  if (!filled.length) return SYSTEM_PROMPT_BASE;
+  const lines = DIMENSIONS.map(d => {
+    const v = (c[d] || '').toString().trim();
+    return `- ${d}：${v || '（尚未确认，可追问）'}`;
+  }).join('\n');
+  return SYSTEM_PROMPT_BASE +
+    `\n\n## 已确认信息（本次访谈至今）\n${lines}\n\n` +
+    `上方已有内容的维度不要再问。请从"尚未确认"的维度中挑一个继续追问。`;
+}
 
 // ── Send message ──
 async function sendMessage() {
@@ -1635,29 +1716,9 @@ async function sendMessage() {
   if (userMsgCount === 1) switchTabById('requirements');
 
   try {
-    const SYSTEM_PROMPT = `你是朝曦金融机构高端客户增值服务平台的资深业务分析师，精通公司五大核心服务体系：
-1. 家族财富架构服务（境内外信托架构、资本市场投融资、全球资产配置、股权激励）
-2. 全球税务规划（美/加/新加坡税务合规、上市公司股东减持税务、跨境架构涉税、CRS/FATCA）
-3. 全球法律咨询（资本金融、公司商事、婚姻家事、企业合规、不良资产处置）
-4. 资本市场服务（上市公司股东减持、股东融资退出、拟上市公司架构、私募基金架构）
-5. 企业治理（ESG合规、组织效能提升、股权激励体系、接班人规划）
-
-五大客群：上市公司股东、新兴/传统企业家、国际化人士（美/加/澳/英）、企业家太太、高净值家族。
-
-任务：通过深度访谈，将朝曦业务团队模糊的想法转化为清晰、可落地的IT系统需求。
-
-## 追问原则
-1. 每次只问一个问题，绝不连问
-2. 不接受模糊回答：听到"大概""差不多"时追问具体数字或细节
-3. completeness 达 80 以上才建议进入总结
-4. 全程使用中文
-
-## 严格输出格式（只输出 JSON，不要任何其他文字）
-{"message":"AI回应文字+下一个追问问题","stage":"opening或exploring或drilling或summarizing","completeness":0到100整数}`;
-
-    // 构建消息列表（保留最近8条+系统提示）
+    // 构建消息列表（保留最近8条 + 系统提示 + 已确认信息锚点）
     const recentHistory = history.slice(-8).map(m => ({ role: m.role, content: m.content }));
-    const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...recentHistory];
+    const messages = [{ role: 'system', content: _buildSystemPrompt() }, ...recentHistory];
 
     // 流式渲染：从半截 JSON 里增量抠出 message 字段，边收边打字
     let streamBubble = null;
@@ -1787,7 +1848,13 @@ function applyAIResponse(data, addToHistory, streamBubble) {
   // 只将纯对话文本存入历史记录，不存 mermaid/requirements（按需生成）
   if (addToHistory) history.push({ role: 'assistant', content: msg });
 
-  if (typeof data.completeness === 'number') setCompleteness(data.completeness);
+  // 记忆锚点：保存本轮已确认信息，供下一轮回填进系统提示词
+  if (data.confirmed && typeof data.confirmed === 'object') currentConfirmed = data.confirmed;
+
+  // 完整度优先按维度计算；AI 未返回 confirmed 时才降级采用它给的数字
+  if (!updateCompletenessFromConfirmed() && typeof data.completeness === 'number') {
+    setCompleteness(data.completeness);
+  }
   if (data.stage) {
     updateStage(data.stage);
     updateQuickChips(data.stage);
@@ -2007,6 +2074,31 @@ function setCompleteness(pct) {
   document.getElementById('progress-fill').style.width = pct+'%';
   document.getElementById('progress-pct').textContent = pct+'%';
   if (pct >= 70) document.getElementById('export-btn').classList.add('visible');
+}
+
+/** 已确认的维度个数；currentConfirmed 不可用时返回 -1 */
+function _confirmedCount(c) {
+  if (!c || typeof c !== 'object') return -1;
+  return DIMENSIONS.filter(d => (c[d] || '').toString().trim()).length;
+}
+
+/**
+ * 完整度改由「已确认维度数 / 8」计算，不再采信 AI 随口给的数字——
+ * 同一段对话重跑两次会得到同一个进度，且能明确告知还差哪几个维度。
+ * @returns {boolean} false 表示 confirmed 不可用，调用方应降级
+ */
+function updateCompletenessFromConfirmed() {
+  const n = _confirmedCount(currentConfirmed);
+  if (n < 0) return false;
+  setCompleteness(Math.round(n / DIMENSIONS.length * 100));
+  const missing = DIMENSIONS.filter(d => !(currentConfirmed[d] || '').toString().trim());
+  const wrap = document.querySelector('.progress-wrap');
+  if (wrap) {
+    wrap.title = missing.length
+      ? `已确认 ${n}/${DIMENSIONS.length} 个维度\n还差：${missing.join('、')}`
+      : `八大维度已全部确认，可以生成需求文档了`;
+  }
+  return true;
 }
 
 // ── Diagram ──
@@ -3769,6 +3861,7 @@ function autoSave() {
     uiWireframeMermaid: currentUiWireframeMermaid,
     uiWireframeSpec: currentUiWireframeSpec,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
+    confirmed: currentConfirmed,
     completeness,
     savedAt: new Date().toISOString()
   };
@@ -3791,6 +3884,7 @@ function saveCurrentSession(customName) {
     wireframeMermaid: currentWireframeMermaid,
     uiWireframeMermaid: currentUiWireframeMermaid,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
+    confirmed: currentConfirmed,
     completeness
   };
   if (idx >= 0) sessions[idx] = session;
@@ -3866,8 +3960,10 @@ async function loadSession(id) {
   currentWireframeMermaid   = session.wireframeMermaid || '';
   currentUiWireframeMermaid = session.uiWireframeMermaid || '';
   currentUiWireframeSpec    = session.uiWireframeSpec    || '';
+  currentConfirmed     = session.confirmed || null;
   currentSessionId     = session.id;
-  setCompleteness(session.completeness || 0);
+  // 老会话没有 confirmed，此时沿用存档里的 completeness
+  if (!updateCompletenessFromConfirmed()) setCompleteness(session.completeness || 0);
 
   // ③ 重置所有生成按钮
   ['summary', 'wireframe', 'preview', 'prd', 'ui_wireframe'].forEach(t => setGenBtnState(t, 'idle'));
@@ -3968,8 +4064,11 @@ function newSession() {
   currentWireframeMermaid = '';
   currentUiWireframeMermaid = '';
   currentUiWireframeSpec = '';
+  currentConfirmed = null;
   currentSessionId = null;
   setCompleteness(0);
+  const _pw = document.querySelector('.progress-wrap');
+  if (_pw) _pw.title = '';
   updateStage('opening');
   document.getElementById('messages').innerHTML = '';
   document.getElementById('summary-list').innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求</div>';
@@ -3984,8 +4083,8 @@ function newSession() {
   updateCurrentSessionLabel('');
   // 重置各生成按钮
   ['summary','wireframe','preview','prd','ui_wireframe'].forEach(t => setGenBtnState(t, 'idle'));
-  // 重新加载开场白
-  applyAIResponse({ message: "您好！我是朝曦的业务需求分析助手，熟悉家族财富架构、全球税务规划、资本市场服务、法律咨询和企业治理五大业务体系。\n\n**我的工作方式：** 通过深度访谈把模糊想法变成清晰的IT需求，对话结束后点击右侧各板块的「⚡ 生成」按钮，可一键生成需求梳理、流程图、线框图和PRD文档，最终可直接交付IT团队。\n\n**请描述您的业务场景：** 所在部门、业务痛点、期望解决的问题，或直接上传相关文件。", stage: "opening", completeness: 0 }, false);
+  // 重新加载开场白（复用 LOCAL_OPENING，避免两处文案各写一份而逐渐走样）
+  applyAIResponse(LOCAL_OPENING, false);
   showDesktopOpener();
   hideSessionsPanel();
   showToast('➕ 新任务已开始');
@@ -4076,8 +4175,9 @@ window.addEventListener('DOMContentLoaded', () => {
           history = autosave.history || [];
           currentRequirements = autosave.requirements || [];
           currentMermaid = autosave.mermaid || '';
+          currentConfirmed = autosave.confirmed || null;
           currentSessionId = autosave.id || null;
-          setCompleteness(autosave.completeness || 0);
+          if (!updateCompletenessFromConfirmed()) setCompleteness(autosave.completeness || 0);
           rebuildChat();
           if (currentMermaid) renderConvDiagram(currentMermaid);
           if (currentRequirements.length) renderRequirements(currentRequirements);
