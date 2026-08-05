@@ -1,5 +1,7 @@
-# 环境变量（含 API Key，绝对不能上传）
+# 环境变量与凭据（绝对不能上传）
 .env
+supabase password.txt
+pass*word*.txt
 
 # Python
 __pycache__/
