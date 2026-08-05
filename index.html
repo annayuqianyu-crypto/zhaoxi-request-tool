@@ -657,7 +657,7 @@
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
         </svg>
       </button>
-      <input id="file-input" type="file" accept=".docx,.xlsx,.pptx,.ppt" hidden onchange="handleFileSelect(event)">
+      <input id="file-input" type="file" accept=".docx,.xlsx,.xls,.pptx,.txt,.md" hidden onchange="handleFileSelect(event)">
       <!-- Send button -->
       <button id="send-btn" onclick="sendMessage()" title="发送 (Enter)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -907,7 +907,7 @@
               <div style="width:36px;height:36px;background:#ebf8ff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">📎</div>
               <div>
                 <div style="font-size:14px;font-weight:700;color:#2d3748;margin-bottom:4px;">上传附件</div>
-                <div style="font-size:13px;color:#718096;line-height:1.65;">点击输入框左侧📎按钮，可上传 Word / Excel / PPT 等文件，AI 将自动读取内容辅助分析</div>
+                <div style="font-size:13px;color:#718096;line-height:1.65;">点击输入框左侧📎按钮，可上传 Word(.docx) / Excel(.xlsx) / PPT(.pptx) / 文本(.txt .md) 文件，AI 将自动读取内容辅助分析</div>
               </div>
             </div>
             <div style="display:flex;gap:12px;align-items:flex-start;">
@@ -1659,14 +1659,25 @@ async function sendMessage() {
     const recentHistory = history.slice(-8).map(m => ({ role: m.role, content: m.content }));
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...recentHistory];
 
-    const rawText = await _callAIStream(messages, 2048, null);
+    // 流式渲染：从半截 JSON 里增量抠出 message 字段，边收边打字
+    let streamBubble = null;
+    let lastRendered = '';
+    const rawText = await _callAIStream(messages, 2048, (_, acc) => {
+      const partial = _extractPartialMessage(acc);
+      if (partial === null || partial === lastRendered) return;
+      lastRendered = partial;
+      if (!streamBubble) streamBubble = beginStreamingMessage();
+      streamBubble.innerHTML = fmt(partial);
+      scrollBottom();
+    });
 
     // 复用后端同款 JSON 解析逻辑（三次尝试 + fallback）
     const data = _parseAIText(rawText);
-    applyAIResponse(data, true);
+    applyAIResponse(data, true, streamBubble);
 
   } catch(e) {
     removeTyping();
+    removeStreamingMessage();
     addMessage('ai', '⚠️ 请求失败：' + e.message);
   } finally {
     setLoading(false);
@@ -1701,14 +1712,78 @@ function _parseAIText(raw) {
   return { message: msg, stage: 'exploring', completeness: 10 };
 }
 
-function applyAIResponse(data, addToHistory) {
+/**
+ * 从「尚未收完的」JSON 流中增量提取 message 字段的明文，用于流式打字效果。
+ * AI 按约定输出 {"message":"...","stage":"...","completeness":N}，
+ * 流中途 JSON 必然不合法，无法 JSON.parse，只能手工扫描字符串体并逐个还原转义。
+ * 尾部若是被截断的转义序列（\ 或 \uXX），直接丢弃，等下一个 chunk 补齐。
+ * @returns {string|null} null 表示 message 字段还没开始出现
+ */
+function _extractPartialMessage(acc) {
+  const keyIdx = acc.indexOf('"message"');
+  if (keyIdx < 0) return null;
+  let i = acc.indexOf('"', keyIdx + 9);   // '"message"' 长 9，其后第一个引号即值的起始引号
+  if (i < 0) return null;
+  i++;
+  const ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' };
+  let out = '';
+  while (i < acc.length) {
+    const ch = acc[i];
+    if (ch === '\\') {
+      const nx = acc[i + 1];
+      if (nx === undefined) break;        // 转义符被切在 chunk 边界上
+      if (nx === 'u') {
+        const hex = acc.slice(i + 2, i + 6);
+        if (!/^[0-9a-fA-F]{4}$/.test(hex)) break;   // \uXXXX 未收全
+        out += String.fromCharCode(parseInt(hex, 16));
+        i += 6;
+      } else {
+        out += ESCAPES[nx] || nx;
+        i += 2;
+      }
+      continue;
+    }
+    if (ch === '"') break;               // message 值结束
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+/** 创建一个空 AI 气泡供流式填充，返回其 .bubble 元素 */
+function beginStreamingMessage() {
+  removeTyping();
+  const c = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+  div.id = 'streaming-msg';
+  div.innerHTML = `<div class="avatar ai">AI</div><div class="bubble ai"></div>`;
+  c.appendChild(div);
+  scrollBottom();
+  return div.querySelector('.bubble');
+}
+
+function removeStreamingMessage() {
+  const el = document.getElementById('streaming-msg');
+  if (el) el.remove();
+}
+
+function applyAIResponse(data, addToHistory, streamBubble) {
   removeTyping();
   let msg = data.message || '';
   // 防止万一 AI 输出了 JSON/代码泄漏到气泡
   if (/^\s*(\{|\[|graph\s+(TD|LR|BT|RL)|sequenceDiagram|classDiagram)/.test(msg)) {
     msg = '（分析处理中，请稍候…）';
   }
-  addMessage('ai', msg);
+  if (streamBubble && streamBubble.isConnected) {
+    // 已经流式渲染过：用解析后的最终文本覆盖草稿，不再新建气泡
+    streamBubble.innerHTML = fmt(msg);
+    streamBubble.parentElement.removeAttribute('id');
+    scrollBottom();
+  } else {
+    removeStreamingMessage();
+    addMessage('ai', msg);
+  }
   // 只将纯对话文本存入历史记录，不存 mermaid/requirements（按需生成）
   if (addToHistory) history.push({ role: 'assistant', content: msg });
 
@@ -2863,6 +2938,54 @@ async function copyPRDContent() {
 }
 
 // ── File Upload ──
+/** 按需加载 CDN 脚本；globalName 已存在则直接跳过 */
+function _loadScript(src, globalName) {
+  if (globalName && window[globalName]) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = res;
+    s.onerror = () => rej(new Error('依赖库加载失败，请检查网络后重试'));
+    document.head.appendChild(s);
+  });
+}
+
+/** XML 实体还原（pptx 的 <a:t> 文本里会出现 &amp; &lt; 等） */
+function _decodeXmlEntities(s) {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+          .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d))
+          .replace(/&amp;/g, '&');   // 必须最后处理，避免二次解码
+}
+
+/**
+ * 纯前端解析 .pptx：pptx 本质是 zip，正文文字都在
+ * ppt/slides/slideN.xml 的 <a:t> 节点里，按页码顺序拼接。
+ */
+async function _extractPptxText(arrayBuffer) {
+  await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const slides = Object.keys(zip.files)
+    .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a, b) => parseInt(a.match(/\d+/)[0], 10) - parseInt(b.match(/\d+/)[0], 10));
+
+  if (!slides.length) throw new Error('该文件不是有效的 .pptx，或不含任何幻灯片');
+
+  const parts = [];
+  for (const name of slides) {
+    const xml = await zip.file(name).async('string');
+    // PowerPoint 会把同一段落拆成多个 <a:r> run（改个字号就断开），
+    // 所以必须先按 <a:p> 段落分组、段内 run 直接拼接，否则 "30′" 会被拆成 "3" 和 "0′"
+    const lines = Array.from(xml.matchAll(/<a:p(?:\s[^>]*)?>[\s\S]*?<\/a:p>/g))
+      .map(p => Array.from(p[0].matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g))
+                     .map(t => _decodeXmlEntities(t[1])).join('').trim())
+      .filter(Boolean);
+    if (lines.length) parts.push(`【第 ${name.match(/\d+/)[0]} 页】\n` + lines.join('\n'));
+  }
+  if (!parts.length) throw new Error('未能从该 PPT 中提取到文字（可能整份都是图片）');
+  return parts.join('\n\n');
+}
+
 async function handleFileSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -2878,31 +3001,22 @@ async function handleFileSelect(event) {
       text = await file.text();
     } else if (ext === 'docx') {
       // 用 mammoth.js 解析 Word 文档
-      if (!window.mammoth) {
-        await new Promise((res, rej) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
-          s.onload = res; s.onerror = rej;
-          document.head.appendChild(s);
-        });
-      }
+      await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js', 'mammoth');
       const buf = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ arrayBuffer: buf });
       text = result.value;
     } else if (ext === 'xlsx' || ext === 'xls') {
-      if (!window.XLSX) {
-        await new Promise((res, rej) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-          s.onload = res; s.onerror = rej;
-          document.head.appendChild(s);
-        });
-      }
+      await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'XLSX');
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
       text = wb.SheetNames.map(n => XLSX.utils.sheet_to_csv(wb.Sheets[n])).join('\n\n');
+    } else if (ext === 'pptx') {
+      text = await _extractPptxText(await file.arrayBuffer());
+    } else if (ext === 'ppt' || ext === 'doc') {
+      // SheetJS 能读旧版 .xls，但 .ppt/.doc 的二进制格式浏览器端无解
+      throw new Error(`.${ext} 是 Office 2003 旧格式，浏览器无法解析，请另存为 .${ext}x 后重新上传`);
     } else {
-      throw new Error('仅支持 .txt / .md / .docx / .xlsx 格式');
+      throw new Error('仅支持 .txt / .md / .docx / .xlsx / .pptx 格式');
     }
     const MAX = 8000;
     if (text.length > MAX) text = text.slice(0, MAX) + `\n…（内容过长，已截取前 ${MAX} 字）`;
@@ -2930,16 +3044,14 @@ function clearAttachChip() { const el=document.getElementById('current-chip'); i
 function clearAttachment() { attachedFile=null; clearAttachChip(); }
 
 // ══════════════════════════════════════════
-// ── 语音输入（双引擎）──
-// 引擎1：Web Speech API（实时识别，Chrome/Android原生支持）
-// 引擎2：MediaRecorder + 后端Whisper（兜底，适用iOS等）
+// ── 语音输入（Web Speech API 单引擎）──
+// 仅 Chrome / Edge / Android 支持。原先还有一路 MediaRecorder 录音 → 后端 Whisper
+// 的兜底，后端下线后该路径录完只会提示"暂不可用"，等于让用户白录，已整体移除。
+// Safari / iOS / Firefox 用户改为在点击时立即收到明确提示。
 // ══════════════════════════════════════════
-let mediaRecorder = null;
-let audioChunks = [];
 let wsRecognition = null; // Web Speech API 实例
 
 const MIC_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
-const SPIN_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="40" stroke-dashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>`;
 
 function voiceBtnReset(btn) {
   btn.innerHTML = MIC_ICON;
@@ -2964,7 +3076,6 @@ async function toggleVoice() {
   // ── 正在录音 → 停止 ──
   if (isRecording) {
     if (wsRecognition) wsRecognition.stop();
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     return;
   }
 
@@ -2999,16 +3110,13 @@ async function toggleVoice() {
     };
 
     wsRecognition.onerror = (e) => {
-      // 'not-allowed' 或 'service-not-available' 时降级到 MediaRecorder
+      // no-speech / aborted 属正常结束（没说话或主动停止），不打扰用户
       if (e.error === 'not-allowed') {
-        showToast('⚠️ 麦克风权限被拒，请在浏览器设置中允许');
+        showToast('⚠️ 麦克风权限被拒，请在浏览器设置中允许后重试');
       } else if (e.error === 'service-not-available' || e.error === 'network') {
-        showToast('⚠️ 语音服务不可用，切换备用方案…');
-        isRecording = false;
-        voiceBtnReset(btn);
-        // 降级到 MediaRecorder+Whisper
-        setTimeout(() => startMediaRecorder(btn), 300);
-        return;
+        showToast('⚠️ 语音识别服务连接失败（该功能依赖浏览器内置的在线语音服务，可能被网络拦截），请直接输入文字');
+      } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        showToast('⚠️ 语音识别出错（' + e.error + '），请直接输入文字');
       }
       isRecording = false;
       voiceBtnReset(btn);
@@ -3023,87 +3131,17 @@ async function toggleVoice() {
     try {
       wsRecognition.start();
     } catch(e) {
-      // Web Speech 启动失败，降级
       wsRecognition = null;
-      startMediaRecorder(btn);
+      isRecording = false;
+      voiceBtnReset(btn);
+      showToast('⚠️ 语音识别启动失败：' + e.message + '，请直接输入文字');
     }
     return;
   }
 
-  // ── 引擎2：MediaRecorder + 后端Whisper（兜底） ──
-  startMediaRecorder(btn);
-}
-
-async function startMediaRecorder(btn) {
-  // 检查 MediaRecorder 支持
-  if (!window.MediaRecorder || !navigator.mediaDevices) {
-    showToast('❌ 当前浏览器不支持录音，请使用 Chrome 或 Safari 最新版');
-    return;
-  }
-
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  } catch(e) {
-    const msg = e.name === 'NotAllowedError' ? '麦克风权限被拒，请在浏览器设置中允许后重试' : '无法访问麦克风：' + e.message;
-    showToast('⚠️ ' + msg);
-    return;
-  }
-
-  // 选择最佳音频格式
-  const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg']
-    .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch(_){ return false; } }) || '';
-
-  audioChunks = [];
-  try {
-    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-  } catch(e) {
-    mediaRecorder = new MediaRecorder(stream);
-  }
-
-  mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
-
-  mediaRecorder.onstop = async () => {
-    stream.getTracks().forEach(t => t.stop());
-    isRecording = false;
-    btn.classList.remove('recording');
-    btn.title = '语音输入';
-
-    if (!audioChunks.length) { voiceBtnReset(btn); return; }
-
-    btn.innerHTML = SPIN_ICON;
-    btn.disabled = true;
-    showToast('⏳ 正在识别语音，请稍候…');
-
-    try {
-      const actualMime = mediaRecorder.mimeType || mimeType || 'audio/webm';
-      const ext = actualMime.includes('mp4') ? 'mp4' : actualMime.includes('ogg') ? 'ogg' : 'webm';
-      const blob = new Blob(audioChunks, { type: actualMime });
-      const fd = new FormData();
-      fd.append('file', blob, `rec.${ext}`);
-
-      showToast('⚠️ 语音识别需要后端支持，当前版本暂不可用，请直接输入文字');
-      voiceBtnReset(btn);
-      return;
-    } catch(e) {
-      showToast('❌ 识别失败：' + e.message);
-      console.error('[transcribe]', e);
-    } finally {
-      voiceBtnReset(btn);
-    }
-  };
-
-  mediaRecorder.onerror = (e) => {
-    showToast('❌ 录音出错：' + (e.error?.message || '未知错误'));
-    isRecording = false;
-    voiceBtnReset(btn);
-  };
-
-  mediaRecorder.start(500); // 每500ms收一次数据，避免iOS丢包
-  isRecording = true;
-  btn.classList.add('recording');
-  btn.title = '点击停止录音';
-  showToast('🎙️ 录音中… 说完后点击话筒停止');
+  // ── 浏览器不支持 Web Speech API（Safari / iOS / Firefox）──
+  // 提前告知，不再让用户录完一段才发现用不了
+  showToast('⚠️ 当前浏览器不支持语音识别，请改用 Chrome / Edge，或使用输入法自带的语音输入（如豆包、微信键盘）');
 }
 
 // ── Export ──
