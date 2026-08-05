@@ -560,6 +560,36 @@
     .btn-gen-all:hover:not(:disabled) { background:#2a4a7f; transform:translateY(-1px); box-shadow:0 3px 8px rgba(26,54,93,.25); }
     .btn-zip-all { background:#dd6b20; color:white; }
     .btn-zip-all:hover:not(:disabled) { background:#c05621; transform:translateY(-1px); box-shadow:0 3px 8px rgba(192,86,33,.25); }
+
+    /* ── 框架确认卡片（framing 阶段）── */
+    .fw-card { margin:10px 0 10px 42px; background:#fff; border:1.5px solid #90cdf4; border-radius:12px; padding:14px 16px; box-shadow:0 2px 10px rgba(66,153,225,.12); }
+    .fw-card.locked { border-color:var(--border); box-shadow:none; opacity:.75; }
+    .fw-title { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:3px; display:flex; align-items:center; gap:6px; }
+    .fw-hint { font-size:11.5px; color:#718096; margin-bottom:10px; line-height:1.6; }
+    .fw-main { background:#ebf4ff; border-radius:8px; padding:9px 12px; font-size:12.5px; color:#2c5282; line-height:1.6; margin-bottom:10px; }
+    .fw-main b { color:var(--navy); }
+    .fw-branch { display:flex; align-items:flex-start; gap:9px; padding:9px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:7px; background:#fff; transition:all .18s; }
+    .fw-branch.off { opacity:.45; background:#f7fafc; }
+    .fw-branch input[type=checkbox] { margin-top:2px; width:15px; height:15px; cursor:pointer; flex-shrink:0; accent-color:#3182ce; }
+    .fw-branch-body { flex:1; min-width:0; }
+    .fw-branch-name { font-size:12.5px; font-weight:650; color:#2d3748; }
+    .fw-branch.off .fw-branch-name { text-decoration:line-through; }
+    .fw-branch-desc { font-size:11.5px; color:#718096; line-height:1.55; margin-top:2px; }
+    .fw-ord { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
+    .fw-ord button { width:22px; height:17px; line-height:1; font-size:10px; border:1px solid var(--border); background:#fff; border-radius:4px; cursor:pointer; color:#718096; padding:0; }
+    .fw-ord button:hover:not(:disabled) { background:#ebf4ff; border-color:#90cdf4; color:#2b6cb0; }
+    .fw-ord button:disabled { opacity:.3; cursor:not-allowed; }
+    .fw-seq { font-size:10.5px; font-weight:700; color:#3182ce; background:#ebf8ff; border-radius:4px; padding:1px 5px; margin-right:5px; }
+    .fw-actions { display:flex; gap:8px; margin-top:11px; }
+    .fw-btn { flex:1; padding:9px 12px; font-size:12.5px; font-weight:600; border:none; border-radius:8px; cursor:pointer; transition:all .2s; }
+    .fw-btn-go { background:var(--navy); color:#fff; }
+    .fw-btn-go:hover:not(:disabled) { background:#2a4a7f; transform:translateY(-1px); }
+    .fw-btn-go:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+    .fw-btn-edit { background:#f7fafc; color:#4a5568; border:1px solid var(--border); }
+    .fw-btn-edit:hover { background:#edf2f7; }
+    .fw-done { margin-top:10px; font-size:12px; color:#276749; background:#f0fff4; border:1px solid #9ae6b4; border-radius:8px; padding:8px 11px; line-height:1.6; }
+    #branch-label { font-size:12px; color:#90cdf4; margin-left:8px; }
+    @media (max-width:820px) { .fw-card { margin-left:0; } }
   </style>
 </head>
 <body>
@@ -638,6 +668,7 @@
     <div id="chat-status">
       <div class="stage-dot" id="stage-dot"></div>
       <span id="stage-label">准备开始</span>
+      <span id="branch-label"></span>
     </div>
     <div id="messages"></div>
     <!-- Desktop opening scene picker -->
@@ -1441,6 +1472,16 @@ let currentConfirmed = null;  // 八大维度已确认信息（记忆锚点，�
 // 若 DIMENSIONS 声明在其之后，将来任何触及它的改动都会在页面加载时抛 TDZ 错误。
 const DIMENSIONS = ['角色权限','触发条件','输入数据','处理流程','审批链路','输出结果','异常处理','合规要求'];
 
+// ── 框架确认闸门 ──
+// 用户反馈：AI 听完故事就一头扎进某个细节。根因是八大维度描述的是「一件事」的
+// 八个侧面，而真实需求常含多个子模块——此时问「审批链路是什么」本身就有歧义，
+// 模型只能挑一个默认的钻下去。故在 exploring 与 drilling 之间插入 framing：
+// 先把主干与分支拎出来交用户确认排序，再按确认顺序逐个深挖。
+let currentFramework   = null;   // {main, branches:[{id,name,desc}]}
+let frameworkConfirmed = false;  // 门禁：false 时禁止 drilling
+let branchPlan         = null;   // 用户确认后的深挖计划（已过滤已排序）
+let currentBranchIdx   = 0;      // 当前深挖到第几个分支
+
 // 取用户配置的模型或默认
 function _aiModel() {
   return localStorage.getItem('wolfai_api_model') || 'deepseek-v4-pro';
@@ -1634,8 +1675,19 @@ const SYSTEM_PROMPT_BASE = `你是朝曦金融机构高端客户增值服务平�
 "请描述最近您或同事实际遇到的一个具体情境，就像讲故事一样。"
 从故事叙述中提炼功能要求，而不是让对方自己设计系统。
 
-### 第二步：八大维度结构化深挖
-每轮只挑【当前最不清晰、且对最终方案影响最大】的一个维度追问：
+### 第二步：先拎框架，再深挖（**这一步不可跳过**）
+听懂故事后，**不要立刻追问细节**。先把你理解的整体结构拎出来，交给对方确认：
+- 主干：这件事的核心流程，一句话
+- 分支：拆成 2–5 个相对独立的子模块，每个一句话说明
+
+输出 stage="framing" 与 framework 字段，并在 message 里请对方确认、增删或调整优先级。
+**在对方确认框架之前，绝对不许深挖任何单个细节**——过早钻进某一个分支，会让对方觉得
+你揪着枝节不放，也会浪费访谈时间在无关紧要的模块上。
+
+### 第三步：按确认后的顺序，逐个分支深挖八大维度
+框架确认后，严格按对方给定的分支顺序推进。**每进入一个新分支，先用一句话声明**
+（例如"接下来聊【合规复核与留痕】这一块"），让对方随时知道在聊哪里。
+在当前分支内，每轮只挑【最不清晰、且对方案影响最大】的一个维度追问：
 
 - 【角色权限】谁在用？什么职级？权限边界在哪？
 - 【触发条件】什么情况下启动这件事？多久发生一次？
@@ -1659,15 +1711,26 @@ const SYSTEM_PROMPT_BASE = `你是朝曦金融机构高端客户增值服务平�
 5. 全程使用中文，语气专业但不生硬，不要说教
 
 ## 阶段判定（stage）
+必须按顺序推进，**不得跳过 framing**：
 - opening：还没听到具体业务场景
-- exploring：已听到场景，正在摸清整体轮廓（已确认 1–3 个维度）
-- drilling：轮廓清楚，正在逐维度深挖细节（已确认 4–6 个维度）
+- exploring：已听到故事，正在补全轮廓（发生了什么、涉及谁、卡在哪），通常 1–2 轮
+- framing：轮廓够了，拎出主干与分支交对方确认。**此时必须输出 framework 字段**
+- drilling：框架已获确认，正在按顺序逐个分支深挖八大维度
 - summarizing：八大维度基本齐备（≥7 个），开始复述确认并收尾
 
 ## 输出格式
 只输出 JSON，不要任何其他文字，不要代码块围栏。**message 字段必须排在最前面。**
 
-{"message":"复述理解 + 下一个追问问题","stage":"opening|exploring|drilling|summarizing","confirmed":{"角色权限":"","触发条件":"","输入数据":"","处理流程":"","审批链路":"","输出结果":"","异常处理":"","合规要求":""}}
+{"message":"复述理解 + 下一个追问问题","stage":"opening|exploring|framing|drilling|summarizing","currentBranch":"","framework":null,"confirmed":{"角色权限":"","触发条件":"","输入数据":"","处理流程":"","审批链路":"","输出结果":"","异常处理":"","合规要求":""}}
+
+framework 字段规则：
+- **仅在 stage="framing" 时输出**，其余阶段一律填 null
+- 格式：{"main":"主干流程一句话","branches":[{"id":"b1","name":"分支名","desc":"一句话说明"}]}
+- 分支控制在 2–5 个，id 依次为 b1、b2、b3…
+- 分支之间要相对独立、可分别讨论，不要把同一件事拆成前后两步当作两个分支
+
+currentBranch 字段规则：
+- 仅在 stage="drilling" 时填当前正在深挖的分支 id（如 "b2"），其余阶段填 ""
 
 confirmed 填写规则：
 - 八个键必须全部保留且顺序固定
@@ -1675,36 +1738,60 @@ confirmed 填写规则：
 - 还没问清楚的维度：填空字符串 ""
 - **每轮都要输出完整的 confirmed**，把此前已确认的内容原样带上，绝不能遗漏或省略`;
 
-/** 把已确认信息拼进系统提示词——历史被截断到 8 条后，靠这个锚点保住上下文 */
+/**
+ * 拼装系统提示词，追加两段运行时状态：
+ *  ① 框架门禁——光靠提示词约束模型憋不住还是会提前深挖，故由前端状态兜底
+ *  ② 已确认信息锚点——历史被 slice(-8) 截断后靠它保住上下文
+ */
 function _buildSystemPrompt() {
+  let p = SYSTEM_PROMPT_BASE;
+
+  // ① 框架门禁
+  if (!frameworkConfirmed) {
+    p += `\n\n## 当前状态：框架尚未确认\n` +
+      `对方还没有确认整体框架。你现在【只能】做两件事：补全故事轮廓（exploring），` +
+      `或拎出主干与分支请对方确认（framing）。\n` +
+      `**严禁输出 stage="drilling"，严禁深挖任何单个维度的细节。**`;
+  } else if (branchPlan && branchPlan.length) {
+    const list = branchPlan.map((b, i) =>
+      `${i + 1}. [${b.id}] ${b.name}——${b.desc || ''}`).join('\n');
+    const cur = branchPlan[currentBranchIdx];
+    p += `\n\n## 已确认的框架\n主干：${(currentFramework && currentFramework.main) || ''}\n` +
+      `对方确认的深挖顺序：\n${list}\n\n` +
+      (cur ? `**当前应聚焦分支：[${cur.id}] ${cur.name}**。该分支聊透后再进入下一个，` +
+             `每次切换分支时先用一句话声明。\n` : '') +
+      `未列入上表的内容对方已明确表示不做，不要再问。`;
+  }
+
+  // ② 已确认信息锚点
   const c = currentConfirmed;
-  if (!c || typeof c !== 'object') return SYSTEM_PROMPT_BASE;
-  const filled = DIMENSIONS.filter(d => (c[d] || '').toString().trim());
-  if (!filled.length) return SYSTEM_PROMPT_BASE;
-  const lines = DIMENSIONS.map(d => {
-    const v = (c[d] || '').toString().trim();
-    return `- ${d}：${v || '（尚未确认，可追问）'}`;
-  }).join('\n');
-  return SYSTEM_PROMPT_BASE +
-    `\n\n## 已确认信息（本次访谈至今）\n${lines}\n\n` +
-    `上方已有内容的维度不要再问。请从"尚未确认"的维度中挑一个继续追问。`;
+  if (c && typeof c === 'object' && DIMENSIONS.some(d => (c[d] || '').toString().trim())) {
+    const lines = DIMENSIONS.map(d => {
+      const v = (c[d] || '').toString().trim();
+      return `- ${d}：${v || '（尚未确认，可追问）'}`;
+    }).join('\n');
+    p += `\n\n## 已确认信息（本次访谈至今）\n${lines}\n\n` +
+      `上方已有内容的维度不要再问。请从"尚未确认"的维度中挑一个继续追问。`;
+  }
+  return p;
 }
 
 // ── Send message ──
-async function sendMessage() {
+/** @param {string} [overrideText] 传入则发送该文本（供框架确认等程序化触发），否则取输入框内容 */
+async function sendMessage(overrideText) {
   const ta = document.getElementById('user-input');
-  const text = ta.value.trim();
+  const isAuto = typeof overrideText === 'string';
+  const text = (isAuto ? overrideText : ta.value).trim();
   if (!text || isLoading) return;
 
   // Build message content (include attached file if any)
   let fullContent = text;
-  if (attachedFile) {
+  if (!isAuto && attachedFile) {
     fullContent = `[📎 附件：${attachedFile.filename}，共${attachedFile.char_count}字]\n\n${attachedFile.extracted_text}\n\n---\n[用户说明]\n${text}`;
     clearAttachment();
   }
 
-  ta.value = '';
-  autoResize(ta);
+  if (!isAuto) { ta.value = ''; autoResize(ta); }
 
   hideDesktopOpener();
   addMessage('user', text); // Show original text in UI
@@ -1811,6 +1898,129 @@ function _extractPartialMessage(acc) {
   return out;
 }
 
+// ══════════════════════════════════════════
+// ── 框架确认卡片 ──
+// ══════════════════════════════════════════
+
+let fwDraft = null;   // 卡片上的草稿（用户勾选/排序的中间态）
+
+/** 渲染框架确认卡，让用户看着结构纠错，而不是在对话里猜 AI 理解成什么样 */
+function renderFrameworkCard(fw) {
+  if (!fw || !Array.isArray(fw.branches) || !fw.branches.length) return;
+  // 同时只允许存在一张待确认卡片
+  const old = document.getElementById('fw-card');
+  if (old) old.remove();
+
+  fwDraft = fw.branches.map((b, i) => ({
+    id: b.id || ('b' + (i + 1)),
+    name: b.name || ('分支' + (i + 1)),
+    desc: b.desc || '',
+    include: true
+  }));
+
+  const card = document.createElement('div');
+  card.className = 'fw-card';
+  card.id = 'fw-card';
+  document.getElementById('messages').appendChild(card);
+  paintFrameworkCard(fw.main || '');
+  scrollBottom();
+}
+
+function paintFrameworkCard(mainText) {
+  const card = document.getElementById('fw-card');
+  if (!card) return;
+  if (mainText !== undefined) card.dataset.main = mainText;
+  const main = card.dataset.main || '';
+  const on = fwDraft.filter(b => b.include);
+
+  card.innerHTML =
+    `<div class="fw-title">🧭 先确认整体框架</div>
+     <div class="fw-hint">在深入细节之前，请先确认我理解的结构对不对。<b>取消勾选</b>不需要做的部分，用 <b>↑↓</b> 调整想先聊哪一块。</div>
+     ${main ? `<div class="fw-main"><b>主干：</b>${esc(main)}</div>` : ''}
+     ${fwDraft.map((b, i) => {
+        const seq = b.include ? on.indexOf(b) + 1 : null;
+        return `<div class="fw-branch${b.include ? '' : ' off'}">
+          <input type="checkbox" ${b.include ? 'checked' : ''} onchange="toggleFwBranch(${i})">
+          <div class="fw-branch-body">
+            <div class="fw-branch-name">${seq ? `<span class="fw-seq">${seq}</span>` : ''}${esc(b.name)}</div>
+            ${b.desc ? `<div class="fw-branch-desc">${esc(b.desc)}</div>` : ''}
+          </div>
+          <div class="fw-ord">
+            <button onclick="moveFwBranch(${i},-1)" ${i === 0 ? 'disabled' : ''} title="上移">▲</button>
+            <button onclick="moveFwBranch(${i},1)" ${i === fwDraft.length - 1 ? 'disabled' : ''} title="下移">▼</button>
+          </div>
+        </div>`;
+     }).join('')}
+     <div class="fw-actions">
+       <button class="fw-btn fw-btn-go" onclick="confirmFramework()" ${on.length ? '' : 'disabled'}>
+         ✅ 框架没问题，开始逐项深挖${on.length ? `（${on.length} 项）` : ''}
+       </button>
+       <button class="fw-btn fw-btn-edit" onclick="editFramework()">✏️ 我来补充</button>
+     </div>`;
+}
+
+function toggleFwBranch(i) {
+  fwDraft[i].include = !fwDraft[i].include;
+  paintFrameworkCard();
+}
+
+function moveFwBranch(i, delta) {
+  const j = i + delta;
+  if (j < 0 || j >= fwDraft.length) return;
+  [fwDraft[i], fwDraft[j]] = [fwDraft[j], fwDraft[i]];
+  paintFrameworkCard();
+}
+
+/** 把光标移回输入框，让用户自己补充——AI 会据此修订框架 */
+function editFramework() {
+  const ta = document.getElementById('user-input');
+  ta.focus();
+  showToast('💬 请在下方输入要补充或修改的内容，我会据此调整框架');
+}
+
+/** 确认框架 → 打开 drilling 门禁 → 自动发起下一轮 */
+function confirmFramework() {
+  const chosen = fwDraft.filter(b => b.include);
+  if (!chosen.length) return;
+
+  branchPlan = chosen.map(b => ({ id: b.id, name: b.name, desc: b.desc }));
+  const dropped = fwDraft.filter(b => !b.include);
+  frameworkConfirmed = true;
+  currentBranchIdx = 0;
+
+  // 卡片锁定为只读，保留在对话流里作为记录
+  const card = document.getElementById('fw-card');
+  if (card) {
+    card.classList.add('locked');
+    card.removeAttribute('id');
+    card.querySelectorAll('input,button').forEach(el => el.disabled = true);
+    const done = document.createElement('div');
+    done.className = 'fw-done';
+    done.textContent = `✅ 已确认 ${branchPlan.length} 项，将按此顺序逐个深挖` +
+      (dropped.length ? `；已排除：${dropped.map(b => b.name).join('、')}` : '');
+    card.appendChild(done);
+  }
+
+  updateCompletenessFromConfirmed();
+  updateBranchLabel();
+
+  // 自动发起下一轮，把确认结果作为一条用户消息进入历史
+  const order = branchPlan.map((b, i) => `${i + 1}.${b.name}`).join('　');
+  const msg = `框架确认：按【${order}】的顺序逐项深挖` +
+    (dropped.length ? `；${dropped.map(b => b.name).join('、')}不做。` : '。') +
+    `请从第 1 项开始。`;
+  sendMessage(msg);
+}
+
+/** 状态栏显示当前深挖到哪个分支 */
+function updateBranchLabel() {
+  const el = document.getElementById('branch-label');
+  if (!el) return;
+  if (!frameworkConfirmed || !branchPlan || !branchPlan.length) { el.textContent = ''; return; }
+  const cur = branchPlan[currentBranchIdx];
+  el.textContent = cur ? `· 深挖中 ${currentBranchIdx + 1}/${branchPlan.length}：${cur.name}` : '';
+}
+
 /** 创建一个空 AI 气泡供流式填充，返回其 .bubble 元素 */
 function beginStreamingMessage() {
   removeTyping();
@@ -1850,6 +2060,19 @@ function applyAIResponse(data, addToHistory, streamBubble) {
 
   // 记忆锚点：保存本轮已确认信息，供下一轮回填进系统提示词
   if (data.confirmed && typeof data.confirmed === 'object') currentConfirmed = data.confirmed;
+
+  // 框架确认卡：仅在框架尚未确认时渲染，避免 AI 反复重画已定的结构
+  if (!frameworkConfirmed && data.framework && Array.isArray(data.framework.branches)
+      && data.framework.branches.length) {
+    currentFramework = data.framework;
+    renderFrameworkCard(data.framework);
+  }
+  // 深挖阶段跟踪当前分支，状态栏实时显示"深挖中 2/3"
+  if (frameworkConfirmed && branchPlan && data.currentBranch) {
+    const idx = branchPlan.findIndex(b => b.id === data.currentBranch);
+    if (idx >= 0) currentBranchIdx = idx;
+  }
+  updateBranchLabel();
 
   // 完整度优先按维度计算；AI 未返回 confirmed 时才降级采用它给的数字
   if (!updateCompletenessFromConfirmed() && typeof data.completeness === 'number') {
@@ -2061,8 +2284,8 @@ function switchReqSub(name, btn) {
 }
 
 // ── Stage ──
-const STAGE_MAP = { opening:'准备开始', exploring:'场景探索中', drilling:'深度追问中', summarizing:'整理总结中' };
-const STAGE_CLR = { opening:'#a0aec0', exploring:'#4299e1', drilling:'#ed8936', summarizing:'#48bb78' };
+const STAGE_MAP = { opening:'准备开始', exploring:'场景探索中', framing:'框架确认中', drilling:'深度追问中', summarizing:'整理总结中' };
+const STAGE_CLR = { opening:'#a0aec0', exploring:'#4299e1', framing:'#9f7aea', drilling:'#ed8936', summarizing:'#48bb78' };
 function updateStage(s) {
   document.getElementById('stage-label').textContent = STAGE_MAP[s]||s;
   document.getElementById('stage-dot').style.background = STAGE_CLR[s]||'#68d391';
@@ -2089,14 +2312,23 @@ function _confirmedCount(c) {
  */
 function updateCompletenessFromConfirmed() {
   const n = _confirmedCount(currentConfirmed);
-  if (n < 0) return false;
-  setCompleteness(Math.round(n / DIMENSIONS.length * 100));
-  const missing = DIMENSIONS.filter(d => !(currentConfirmed[d] || '').toString().trim());
+  if (n < 0 && !frameworkConfirmed) return false;
+  const dims = Math.max(n, 0);
+  // 框架确认本身就是实实在在的进展，占 20%；八大维度覆盖占 80%
+  setCompleteness(Math.round((frameworkConfirmed ? 0.2 : 0) * 100 + 0.8 * dims / DIMENSIONS.length * 100));
+
   const wrap = document.querySelector('.progress-wrap');
   if (wrap) {
-    wrap.title = missing.length
-      ? `已确认 ${n}/${DIMENSIONS.length} 个维度\n还差：${missing.join('、')}`
-      : `八大维度已全部确认，可以生成需求文档了`;
+    if (!frameworkConfirmed) {
+      wrap.title = '整体框架尚未确认——先把主干和分支理清，再逐项深挖';
+    } else {
+      const missing = DIMENSIONS.filter(d => !((currentConfirmed || {})[d] || '').toString().trim());
+      const branchInfo = branchPlan && branchPlan.length
+        ? `深挖进度 ${currentBranchIdx + 1}/${branchPlan.length}：${(branchPlan[currentBranchIdx] || {}).name || ''}\n` : '';
+      wrap.title = branchInfo + (missing.length
+        ? `已确认 ${dims}/${DIMENSIONS.length} 个维度\n还差：${missing.join('、')}`
+        : `八大维度已全部确认，可以生成需求文档了`);
+    }
   }
   return true;
 }
@@ -3862,6 +4094,10 @@ function autoSave() {
     uiWireframeSpec: currentUiWireframeSpec,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     confirmed: currentConfirmed,
+    framework: currentFramework,
+    frameworkConfirmed,
+    branchPlan,
+    currentBranchIdx,
     completeness,
     savedAt: new Date().toISOString()
   };
@@ -3885,6 +4121,10 @@ function saveCurrentSession(customName) {
     uiWireframeMermaid: currentUiWireframeMermaid,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     confirmed: currentConfirmed,
+    framework: currentFramework,
+    frameworkConfirmed,
+    branchPlan,
+    currentBranchIdx,
     completeness
   };
   if (idx >= 0) sessions[idx] = session;
@@ -3961,7 +4201,12 @@ async function loadSession(id) {
   currentUiWireframeMermaid = session.uiWireframeMermaid || '';
   currentUiWireframeSpec    = session.uiWireframeSpec    || '';
   currentConfirmed     = session.confirmed || null;
+  currentFramework     = session.framework || null;
+  frameworkConfirmed   = !!session.frameworkConfirmed;
+  branchPlan           = session.branchPlan || null;
+  currentBranchIdx     = session.currentBranchIdx || 0;
   currentSessionId     = session.id;
+  updateBranchLabel();
   // 老会话没有 confirmed，此时沿用存档里的 completeness
   if (!updateCompletenessFromConfirmed()) setCompleteness(session.completeness || 0);
 
@@ -3986,8 +4231,9 @@ async function loadSession(id) {
   if (prdTip)  prdTip.style.display  = 'block';
   if (prdInline) prdInline.textContent = '';
 
-  // ⑤ 重建聊天消息气泡
+  // ⑤ 重建聊天消息气泡；框架卡不在 history 里，需单独补回
   rebuildChat();
+  if (!frameworkConfirmed && currentFramework) renderFrameworkCard(currentFramework);
 
   // ⑥ 恢复需求梳理 + 页面展示
   if (currentRequirements.length) {
@@ -4065,10 +4311,16 @@ function newSession() {
   currentUiWireframeMermaid = '';
   currentUiWireframeSpec = '';
   currentConfirmed = null;
+  currentFramework = null;
+  frameworkConfirmed = false;
+  branchPlan = null;
+  currentBranchIdx = 0;
+  fwDraft = null;
   currentSessionId = null;
   setCompleteness(0);
   const _pw = document.querySelector('.progress-wrap');
   if (_pw) _pw.title = '';
+  updateBranchLabel();
   updateStage('opening');
   document.getElementById('messages').innerHTML = '';
   document.getElementById('summary-list').innerHTML = '<div class="req-empty">点击右上角「⚡ 生成」按钮<br>AI将从对话中提取结构化功能需求</div>';
@@ -4176,9 +4428,15 @@ window.addEventListener('DOMContentLoaded', () => {
           currentRequirements = autosave.requirements || [];
           currentMermaid = autosave.mermaid || '';
           currentConfirmed = autosave.confirmed || null;
+          currentFramework = autosave.framework || null;
+          frameworkConfirmed = !!autosave.frameworkConfirmed;
+          branchPlan = autosave.branchPlan || null;
+          currentBranchIdx = autosave.currentBranchIdx || 0;
           currentSessionId = autosave.id || null;
+          updateBranchLabel();
           if (!updateCompletenessFromConfirmed()) setCompleteness(autosave.completeness || 0);
           rebuildChat();
+          if (!frameworkConfirmed && currentFramework) renderFrameworkCard(currentFramework);
           if (currentMermaid) renderConvDiagram(currentMermaid);
           if (currentRequirements.length) renderRequirements(currentRequirements);
           hideDesktopOpener();
