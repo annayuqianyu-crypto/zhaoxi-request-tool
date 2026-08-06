@@ -558,8 +558,6 @@
     .req-nav-action-btn:disabled { cursor:not-allowed; opacity:.55; }
     .btn-gen-all { background:var(--navy); color:white; }
     .btn-gen-all:hover:not(:disabled) { background:#2a4a7f; transform:translateY(-1px); box-shadow:0 3px 8px rgba(26,54,93,.25); }
-    .btn-zip-all { background:#dd6b20; color:white; }
-    .btn-zip-all:hover:not(:disabled) { background:#c05621; transform:translateY(-1px); box-shadow:0 3px 8px rgba(192,86,33,.25); }
 
     /* ── 框架确认卡片（framing 阶段）── */
     .fw-card { margin:10px 0 10px 42px; background:#fff; border:1.5px solid #90cdf4; border-radius:12px; padding:14px 16px; box-shadow:0 2px 10px rgba(66,153,225,.12); }
@@ -922,7 +920,7 @@
             <div style="background:rgba(255,255,255,.12);border-radius:10px;padding:14px 16px;">
               <div style="font-size:26px;margin-bottom:8px;">📦</div>
               <div style="font-size:15px;font-weight:700;margin-bottom:6px;">③ 生成交付物</div>
-              <div style="font-size:13px;opacity:.9;line-height:1.7;">切换至「需求清单」点击「⚡ 全部生成」，一键输出全套需求物料</div>
+              <div style="font-size:13px;opacity:.9;line-height:1.7;">切换至「需求清单」，在需求梳理／流程图／页面展示／PRD 各板块分别点击「⚡ 生成」，再按需导出</div>
             </div>
           </div>
         </div>
@@ -1498,10 +1496,76 @@ function _aiKey() {
 }
 
 // 格式化历史为访谈文本（供 prompt 用）
-function _buildHistoryText(hist) {
-  return (hist || []).slice(-20).map(m =>
+/**
+ * @param {number} limit 保留最近多少条消息；传 0 表示不限条数（需求梳理这类
+ *   要覆盖整场访谈的场景必须用 0，否则长对话中早期确认的需求会被静默丢弃）
+ */
+function _buildHistoryText(hist, limit = 20) {
+  const arr = hist || [];
+  const use = limit > 0 ? arr.slice(-limit) : arr;
+  const text = use.map(m =>
     (m.role === 'user' ? '业务方' : '分析师') + '：' + m.content
   ).join('\n\n');
+  // 极长访谈的安全上限，防止 prompt 无限膨胀；保留最近的内容
+  const CAP = 60000;
+  return text.length > CAP
+    ? '（前文较长已省略部分早期内容）\n\n' + text.slice(-CAP)
+    : text;
+}
+
+/**
+ * 从「可能被 max_tokens 截断」的 JSON 数组文本中，尽量多地抢救出完整对象。
+ * 逐字符按花括号配平切出每个顶层 {...}，字符串内的括号与转义不计数。
+ * 不能依赖 /\[[\s\S]*\]/ 这类正则：需求对象里的 process/inputs 本身就是数组，
+ * 自带 "]"，贪婪匹配只会截到某个嵌套数组的收尾括号，解析照样失败。
+ */
+function _salvageJsonObjects(text) {
+  const out = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === '{') { if (depth === 0) start = i; depth++; }
+    else if (ch === '}') {
+      if (depth > 0) depth--;
+      if (depth === 0 && start >= 0) {
+        try { out.push(JSON.parse(text.slice(start, i + 1))); } catch {}
+        start = -1;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 需求数组的三级解析：直接解析 → 提取最外层数组 → 逐对象抢救。
+ * @returns {{list:Array, salvaged:boolean}} salvaged=true 表示输出被截断、结果可能不全
+ */
+function _parseRequirements(raw) {
+  const cleaned = (raw || '').replace(/```(?:json)?\s*/g, '').replace(/```/g, '').trim();
+  // 三级统一过滤：缺 module/feature 的对象无法渲染也无法导出，
+  // 放过去只会变成"生成成功但下载出来是空壳"
+  const usable = a => Array.isArray(a) ? a.filter(o => o && typeof o === 'object' && (o.module || o.feature)) : [];
+
+  try {
+    const a = usable(JSON.parse(cleaned));
+    if (a.length) return { list: a, salvaged: false };
+  } catch {}
+  const m = cleaned.match(/\[[\s\S]*\]/);
+  if (m) {
+    try {
+      const a = usable(JSON.parse(m[0]));
+      if (a.length) return { list: a, salvaged: false };
+    } catch {}
+  }
+  const rescued = usable(_salvageJsonObjects(cleaned));
+  return { list: rescued, salvaged: rescued.length > 0 };
 }
 
 // 非流式 AI 调用 → 返回 content 字符串
@@ -2790,9 +2854,11 @@ async function generateSection(type) {
       await generateUiWireframeStream(); return;
     }
 
-    const histText = _buildHistoryText(history);
+    // 需求梳理/页面展示要覆盖整场访谈，必须用全量历史（limit=0）；
+    // 只取最近 20 条会让长对话中早期确认的需求凭空消失
+    const histText = _buildHistoryText(history, (type === 'summary' || type === 'preview') ? 0 : 20);
     let prompt = '';
-    let maxTok = 3000;
+    let maxTok = 8000;   // 长访谈会提取出很多条需求，3000 会把 JSON 截断
     if (type === 'flowchart') {
       maxTok = 2000;
       prompt = `根据以下访谈记录，生成一份完整的 Mermaid 业务流程图。\n\n访谈记录：\n${histText}\n\n【严格遵守以下 Mermaid 语法规则】：\n1. 第一行必须是：graph TD\n2. 节点 ID 只允许使用英文字母和数字，严禁使用中文、空格或特殊符号\n3. 节点标签必须用双引号包裹：A1["中文描述"]；判断节点用花括号：D1{{"是否满足？"}}；开始/结束用圆括号：S(["开始"])\n4. 连线用 --> 或 -->|"说明文字"|\n5. 可以用 subgraph 对阶段分组\n6. 使用 classDef + class 语句：classDef start fill:#d1fae5,stroke:#10b981,color:#065f46\n7. 标签内不能出现未转义的英文双引号\n8. 只输出 Mermaid 代码，不要任何说明、注释或多余文字`;
@@ -2801,16 +2867,25 @@ async function generateSection(type) {
     } else if (type === 'preview') {
       prompt = `根据以下访谈记录，提取并整理所有已明确的功能需求，以 JSON 数组格式输出。\n\n访谈记录：\n${histText}\n\n要求：\n- 每个需求对象包含：module（模块名）、feature（功能名）、description（功能说明）、wireframe（界面布局，格式"顶部：...\\n中部：...\\n底部：..."）、process（操作步骤数组）、inputs（输入项数组）、outputs（输出项数组）\n- 必须包含 wireframe 字段\n- 只输出 JSON 数组，不要任何其他文字\n- 确保 JSON 格式合法`;
     }
-    const rawContent = await _callAI([{ role: 'user', content: prompt }], maxTok);
-    // 兼容旧格式解析
+    let rawContent, salvaged = false;
     let data = { type, requirements: [], mermaid: '' };
+
     if (type === 'flowchart') {
+      rawContent = await _callAI([{ role: 'user', content: prompt }], maxTok);
       data.mermaid = rawContent.replace(/```(?:mermaid)?\s*/g,'').replace(/```/g,'').trim();
     } else {
-      const cleaned = rawContent.replace(/```(?:json)?\s*/g,'').replace(/```/g,'').trim();
-      try { data.requirements = JSON.parse(cleaned); } catch {
-        const m = cleaned.match(/\[[\s\S]*\]/); if (m) try { data.requirements = JSON.parse(m[0]); } catch {}
-      }
+      // 改用流式：长访谈的提取可能耗时很久，非流式请求容易被网络中途掐断，
+      // 且用户在等待期间完全看不到进展
+      const listEl = document.getElementById(type === 'summary' ? 'summary-list' : 'preview-list');
+      if (listEl) listEl.innerHTML = '<div class="req-empty">正在从访谈记录中提取需求…</div>';
+      rawContent = await _callAIStream([{ role: 'user', content: prompt }], maxTok, (_, acc) => {
+        if (!listEl) return;
+        const n = (acc.match(/"module"\s*:/g) || []).length;
+        listEl.innerHTML = `<div class="req-empty">正在从访谈记录中提取需求…${n ? `已识别 ${n} 条` : ''}</div>`;
+      });
+      const parsed = _parseRequirements(rawContent);
+      data.requirements = parsed.list;
+      salvaged = parsed.salvaged;
     }
 
     if (type === 'flowchart' && data.mermaid) {
@@ -2829,14 +2904,26 @@ async function generateSection(type) {
         setGenBtnState(type, 'done');
         showToast('🖥️ 页面展示已生成');
       }
+      // 输出被截断但已抢救出部分内容：如实告知，结果照常可用可下载
+      if (salvaged) {
+        showToast(`⚠️ 内容较多，本次提取到 ${data.requirements.length} 条（可能不全），可点「⟳ 重新生成」再试`);
+      }
       markPRDStale();
       updateMobileReqBadge(currentRequirements.length);
     } else {
+      // 绝不静默失败——此前这里什么都不做，用户只看到按钮闪一下，
+      // 随后下载时才被告知「请先生成」，完全无从判断出了什么问题
       setGenBtnState(type, 'idle');
-      // 内容为空时静默处理，不弹窗打断用户
+      const listEl = document.getElementById(type === 'summary' ? 'summary-list' : 'preview-list');
+      if (listEl) listEl.innerHTML =
+        '<div class="req-empty">未能提取出需求内容<br>请确认访谈中已聊到具体功能，或点「⚡ 生成」重试</div>';
+      showToast('⚠️ 未能提取出需求内容，请重试或补充访谈内容');
     }
   } catch(e) {
     setGenBtnState(type, 'idle');
+    const listEl = document.getElementById(type === 'summary' ? 'summary-list' : 'preview-list');
+    if (listEl) listEl.innerHTML =
+      `<div class="req-empty">生成失败：${esc(e.message)}<br>请重试</div>`;
     alert('生成失败：' + e.message);
   }
 }
@@ -3667,6 +3754,9 @@ async function exportSVGasPNG(wrapId, filename) {
       }
     };
     img.onerror = () => reject(new Error('SVG加载失败，请重试'));
+    // 兜底：图片若既不 onload 也不 onerror，这里的 await 会永远挂着，
+    // 按钮卡死且无任何提示。宁可报错让用户重试，也不能静默悬停。
+    setTimeout(() => reject(new Error('图片生成超时，请重试或改用「导出代码」')), 15000);
     img.src = dataUri;
   });
   showToast('📷 图片已下载：' + filename);
@@ -3905,54 +3995,12 @@ async function exportPRDWord() {
   showToast('📥 PRD已下载（Markdown格式，可用Word打开）');
 }
 
-// ── SVG → PNG Blob（内部辅助，不直接下载）──
-async function _svgToPngBlob(wrapId) {
-  const wrap = document.getElementById(wrapId);
-  const svg  = wrap ? wrap.querySelector('svg') : null;
-  if (!svg) return null;
-  let W = 800, H = 600;
-  const vb = svg.getAttribute('viewBox');
-  if (vb) {
-    const p = vb.trim().split(/[\s,]+/);
-    if (p.length >= 4) { W = parseFloat(p[2]) || W; H = parseFloat(p[3]) || H; }
-  } else {
-    W = parseFloat(svg.getAttribute('width'))  || W;
-    H = parseFloat(svg.getAttribute('height')) || H;
-  }
-  W = Math.max(W, 600); H = Math.max(H, 400);
-  const cloned = svg.cloneNode(true);
-  cloned.setAttribute('width', W);
-  cloned.setAttribute('height', H);
-  cloned.style.transform = 'none';
-  const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(cloned);
-  const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(svgBlob);
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload = () => {
-      const sc = 2;
-      const canvas = document.createElement('canvas');
-      canvas.width  = W * sc; canvas.height = H * sc;
-      const ctx = canvas.getContext('2d');
-      ctx.scale(sc, sc);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, W, H);
-      ctx.drawImage(img, 0, 0, W, H);
-      URL.revokeObjectURL(url);
-      canvas.toBlob(b => resolve(b), 'image/png');
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-    img.src = url;
-  });
-}
 
 // ── 一键生成全部物料 ──
 async function generateAllSections() {
   if (!history.length) { alert('请先开始对话，再生成需求内容'); return; }
-  const btn    = document.getElementById('btn-gen-all');
-  const zipBtn = document.getElementById('btn-zip-all');
-  if (btn)    { btn.disabled = true;    btn.textContent = '⏳ 生成中…'; }
-  if (zipBtn) zipBtn.disabled = true;
+  const btn = document.getElementById('btn-gen-all');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中…'; }
   try {
     showToast('⏳ (1/5) 正在生成需求梳理…');
     await generateSection('summary');        // 内部会自动触发流程图（非 await）
@@ -3964,106 +4012,14 @@ async function generateAllSections() {
     await generateSection('preview');
     showToast('⏳ (5/5) 正在生成PRD文档…');
     await generatePRDInline();
-    showToast('✅ 全部物料已生成完成！可点击「📦 打包下载」一键导出');
+    showToast('✅ 全部物料已生成完成！可在各板块分别点击导出');
   } catch(e) {
     showToast('❌ 生成过程出错：' + e.message);
   } finally {
-    if (btn)    { btn.disabled = false;    btn.textContent = '⚡ 全部生成'; }
-    if (zipBtn) zipBtn.disabled = false;
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ 全部生成'; }
   }
 }
 
-// ── 一键打包下载全部物料 (ZIP) ──
-async function downloadAllZip() {
-  if (!currentRequirements.length && !currentMermaid && !currentWireframeMermaid) {
-    alert('暂无已生成的物料，请先点击「⚡ 全部生成」或分别生成各项内容'); return;
-  }
-  // 懒加载 JSZip
-  if (!window.JSZip) {
-    showToast('⏳ 正在加载打包组件…');
-    await new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-      s.onload = res; s.onerror = () => rej(new Error('打包组件加载失败，请检查网络'));
-      document.head.appendChild(s);
-    }).catch(e => { alert(e.message); return Promise.reject(e); });
-  }
-  const btn    = document.getElementById('btn-zip-all');
-  const genBtn = document.getElementById('btn-gen-all');
-  if (btn)    { btn.disabled = true;    btn.textContent = '⏳ 打包中…'; }
-  if (genBtn) genBtn.disabled = true;
-  showToast('⏳ 正在打包全部物料，请稍候…');
-  try {
-    const zip = new window.JSZip();
-    const now = new Date().toLocaleString('zh-CN');
-    let fileCount = 0;
-
-    // 01 需求梳理文本
-    if (currentRequirements.length) {
-      let text = '朝曦家办-需求打磨工作台 · 需求梳理报告\n';
-      text += `生成时间：${now}\n${'═'.repeat(50)}\n\n`;
-      currentRequirements.forEach((req, i) => {
-        if (typeof req === 'object') {
-          text += `【${i+1}】${req.module || '功能'} · ${req.feature || ''}\n${'─'.repeat(35)}\n`;
-          if (req.description) text += `功能说明：${req.description}\n`;
-          if (req.inputs?.length)  text += `输入数据：${req.inputs.join('、')}\n`;
-          if (req.outputs?.length) text += `输出结果：${req.outputs.join('、')}\n`;
-          if (req.process?.length) { text += '操作步骤：\n'; req.process.forEach((s,j) => text += `  ${j+1}. ${s}\n`); }
-          text += '\n';
-        } else { text += `【${i+1}】${req}\n\n`; }
-      });
-      zip.file('01_需求梳理.txt', text); fileCount++;
-    }
-
-    // 02 业务流程图
-    if (currentMermaid) {
-      zip.file('02_业务流程图代码.txt', currentMermaid); fileCount++;
-      const pngBlob = await _svgToPngBlob('req-flow-wrap');
-      if (pngBlob) { zip.file('02_业务流程图.png', pngBlob); fileCount++; }
-    }
-
-    // 03 功能流程设计图（线框图）
-    if (currentWireframeMermaid) {
-      zip.file('03_功能流程设计图代码.txt', currentWireframeMermaid); fileCount++;
-      const pngBlob = await _svgToPngBlob('wireframe-diagram-wrap');
-      if (pngBlob) { zip.file('03_功能流程设计图.png', pngBlob); fileCount++; }
-    }
-
-    // 04 页面展示 HTML 原型
-    const previewList = document.getElementById('preview-list');
-    if (previewList?.querySelector('.page-mock-wrap')) {
-      let css = '';
-      try {
-        Array.from(document.styleSheets).forEach(sheet => {
-          try {
-            Array.from(sheet.cssRules).forEach(rule => {
-              const t = rule.cssText || '';
-              if (t.includes('.pm-') || t.includes('.page-mock') || t.includes(':root')) css += t + '\n';
-            });
-          } catch {}
-        });
-      } catch {}
-      const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>页面模拟展示</title><style>*{box-sizing:border-box}body{margin:0;padding:24px;font-family:-apple-system,sans-serif;background:#f7f8fa}h1{font-size:15px;color:#1a365d;margin:0 0 4px}.export-meta{font-size:12px;color:#a0aec0;margin-bottom:20px}${css}</style></head><body><h1>📋 页面模拟展示原型</h1><div class="export-meta">由朝曦家办-需求打磨工作台生成 · ${now}</div>${previewList.innerHTML}</body></html>`;
-      zip.file('04_页面展示原型.html', html); fileCount++;
-    }
-
-    // 05 PRD 文档
-    const prdText = document.getElementById('prd-inline-content')?.textContent?.trim();
-    if (prdText) { zip.file('05_PRD需求规格说明书.txt', prdText); fileCount++; }
-
-    if (fileCount === 0) { alert('暂无已生成的物料可下载，请先生成内容'); return; }
-
-    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{ level:6 } });
-    const dateStr = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
-    downloadBlob(blob, `朝曦需求物料包_${dateStr}.zip`);
-    showToast(`📦 已打包 ${fileCount} 个文件，正在下载…`);
-  } catch(e) {
-    alert('打包失败：' + e.message);
-  } finally {
-    if (btn)    { btn.disabled = false;    btn.textContent = '📦 打包下载'; }
-    if (genBtn) genBtn.disabled = false;
-  }
-}
 
 // ══════════════════════════════════════════
 // ── 会话管理 (Session Management) ──
