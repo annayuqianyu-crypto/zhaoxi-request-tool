@@ -4205,8 +4205,21 @@ function autoSave() {
     completeness,
     savedAt: new Date().toISOString()
   };
-  localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(state));
+  // 必须包住：长访谈体积大，写超限会抛 QuotaExceededError。autoSave 在
+  // applyAIResponse 中被调用，异常会一路冒到 sendMessage 的 catch，把一次
+  // 成功的回复显示成「请求失败」，而进度其实根本没存上。
+  try {
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(state));
+    _autosaveWarned = false;
+  } catch (e) {
+    console.warn('[autoSave] 暂存失败', e);
+    if (!_autosaveWarned) {   // 节流：只提醒一次，不每轮刷屏
+      _autosaveWarned = true;
+      showToast('⚠️ 本机存储已满，自动暂存失败！请到「任务列表」导出备份并清理旧任务');
+    }
+  }
 }
+let _autosaveWarned = false;
 
 function saveCurrentSession(customName) {
   if (!history.length) { showToast('⚠️ 暂无对话内容可保存'); return; }
@@ -4251,6 +4264,21 @@ function saveCurrentSessionAs() {
   saveCurrentSession(name.trim() || autoSessionName());
 }
 
+/**
+ * 存量会话迁移。框架闸门与滚动摘要都是后加的，此前保存的会话没有这些字段。
+ * 若照直判为「框架未确认」，一个已经聊了很多轮、早就深入细节的老会话会被
+ * 强制拉回框架确认阶段重新走一遍——对用户是明显倒退。
+ * 因此：完全没有框架数据、且已有实质进展的老会话，视为框架已确认，直接续聊。
+ * @param {object} src 会话或暂存对象
+ */
+function _migrateLegacyState(src) {
+  const hasNoFrameworkData = !src.framework && src.frameworkConfirmed === undefined;
+  if (hasNoFrameworkData && (src.history || []).length >= 12) {
+    frameworkConfirmed = true;   // 老会话不再回炉框架确认
+    branchPlan = null;           // 无分支计划：提示词不注入门禁，也不注入分支聚焦
+  }
+}
+
 async function loadSession(id) {
   // 服务端已下线：此处原本会先请求 /api/sessions/{id}，在 GitHub Pages 上必定
   // 404，先弹「📂 加载中…」再静默降级，纯属多余往返与误导性提示，已移除。
@@ -4280,9 +4308,11 @@ async function loadSession(id) {
   branchPlan           = session.branchPlan || null;
   currentBranchIdx     = session.currentBranchIdx || 0;
   currentSessionId     = session.id;
+  _migrateLegacyState(session);
   updateBranchLabel();
-  // 老会话没有 confirmed，此时沿用存档里的 completeness
-  if (!updateCompletenessFromConfirmed()) setCompleteness(session.completeness || 0);
+  // 老会话没有维度数据，直接沿用存档里的完整度，避免显示倒退
+  if (currentConfirmed) updateCompletenessFromConfirmed();
+  else setCompleteness(session.completeness || 0);
 
   // ③ 重置所有生成按钮
   ['summary', 'wireframe', 'preview', 'prd', 'ui_wireframe'].forEach(t => setGenBtnState(t, 'idle'));
@@ -4581,40 +4611,85 @@ function renderSessionsList() {
   }).join('');
 }
 
+/** 从暂存快照恢复全部状态。字段务必与 autoSave 写入的保持一致，漏一个就丢一样东西 */
+function restoreFromSnapshot(snap) {
+  history                   = snap.history || [];
+  currentRequirements       = snap.requirements || [];
+  currentMermaid            = snap.mermaid || '';
+  currentWireframeMermaid   = snap.wireframeMermaid || '';
+  currentUiWireframeMermaid = snap.uiWireframeMermaid || '';
+  currentUiWireframeSpec    = snap.uiWireframeSpec || '';
+  currentConfirmed          = snap.confirmed || null;
+  convDigest                = snap.convDigest || '';
+  digestedUpTo              = snap.digestedUpTo || 0;
+  currentFramework          = snap.framework || null;
+  frameworkConfirmed        = !!snap.frameworkConfirmed;
+  branchPlan                = snap.branchPlan || null;
+  currentBranchIdx          = snap.currentBranchIdx || 0;
+  currentSessionId          = snap.id || null;
+  _migrateLegacyState(snap);
+  updateBranchLabel();
+  if (currentConfirmed) updateCompletenessFromConfirmed();
+  else setCompleteness(snap.completeness || 0);
+
+  rebuildChat();
+  if (!frameworkConfirmed && currentFramework) renderFrameworkCard(currentFramework);
+  if (currentMermaid) renderConvDiagram(currentMermaid);
+  if (currentRequirements.length) renderRequirements(currentRequirements);
+  if (currentWireframeMermaid)   renderWireframeDiagram(currentWireframeMermaid).catch(()=>{});
+  if (currentUiWireframeMermaid) renderUiWireframeDiagram(currentUiWireframeMermaid).catch(()=>{});
+  if (currentUiWireframeSpec)    renderUiWireframeSpec(currentUiWireframeSpec);
+  const prdEl = document.getElementById('prd-inline-content');
+  if (prdEl && snap.prdContent) {
+    prdEl.textContent = snap.prdContent;
+    const box = document.getElementById('prd-result-box');
+    const tip = document.getElementById('prd-empty-tip');
+    if (box) box.style.display = 'block';
+    if (tip) tip.style.display = 'none';
+    setGenBtnState('prd', 'done');
+  }
+  hideDesktopOpener();
+}
+
+/**
+ * 用户选择「不恢复」时把暂存归档进任务列表。
+ * 否则他只要再发一条消息，autoSave 就会覆盖掉这份暂存——对一个聊了上百轮
+ * 却从没点过「保存」的用户，那是凭空蒸发。confirm 被浏览器拦截时同样返回
+ * false，会走到这里，所以这条兜底尤其重要。
+ */
+function archiveAutosave(snap, msgCount) {
+  const sessions = getSessions();
+  const id = snap.id || genSessionId();
+  if (sessions.some(s => s.id === id)) return;   // 已在任务列表中，无需归档
+  const firstUser = (snap.history || []).find(h => h.role === 'user');
+  const name = (firstUser ? firstUser.content.replace(/\[📎[^\]]+\]/g, '').trim().slice(0, 22) : '')
+               || '未恢复的会话';
+  sessions.unshift({ ...snap, id, name, savedAt: snap.savedAt || new Date().toISOString() });
+  if (saveSessions(sessions)) {
+    setTimeout(() => showToast(
+      `📥 上次的 ${msgCount} 轮对话已存入「任务列表」，可随时恢复，不会丢失`), 400);
+  }
+}
+
 // 页面加载时检查自动存档，提示恢复
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(initDesktopOpener, 0);
-  try {
-    const autosave = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null');
-    if (autosave && autosave.history && autosave.history.length > 0) {
-      const msgCount = autosave.history.filter(h => h.role === 'user').length;
-      const savedTime = new Date(autosave.savedAt).toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-      // 短暂延迟后提示（等页面初始化完成）
-      setTimeout(() => {
-        if (confirm(`检测到上次未完成的会话（${savedTime}，${msgCount} 轮对话）\n\n是否恢复上次会话？`)) {
-          history = autosave.history || [];
-          currentRequirements = autosave.requirements || [];
-          currentMermaid = autosave.mermaid || '';
-          currentConfirmed = autosave.confirmed || null;
-          convDigest = autosave.convDigest || '';
-          digestedUpTo = autosave.digestedUpTo || 0;
-          currentFramework = autosave.framework || null;
-          frameworkConfirmed = !!autosave.frameworkConfirmed;
-          branchPlan = autosave.branchPlan || null;
-          currentBranchIdx = autosave.currentBranchIdx || 0;
-          currentSessionId = autosave.id || null;
-          updateBranchLabel();
-          if (!updateCompletenessFromConfirmed()) setCompleteness(autosave.completeness || 0);
-          rebuildChat();
-          if (!frameworkConfirmed && currentFramework) renderFrameworkCard(currentFramework);
-          if (currentMermaid) renderConvDiagram(currentMermaid);
-          if (currentRequirements.length) renderRequirements(currentRequirements);
-          hideDesktopOpener();
-          showToast('📂 已恢复上次会话');
-        }
-      }, 800);
+  let autosave = null;
+  try { autosave = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null'); } catch (e) {}
+  if (!autosave || !Array.isArray(autosave.history) || !autosave.history.length) return;
+
+  const msgCount = autosave.history.filter(h => h.role === 'user').length;
+  const savedTime = new Date(autosave.savedAt).toLocaleString('zh-CN',
+    { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+
+  setTimeout(() => {
+    if (confirm(`检测到上次未完成的会话（${savedTime}，${msgCount} 轮对话）\n\n是否恢复上次会话？`)) {
+      restoreFromSnapshot(autosave);
+      showToast('📂 已恢复上次会话');
+    } else {
+      archiveAutosave(autosave, msgCount);
     }
-  } catch(e) {}
+  }, 800);
 });
 
 // ══════════════════════════════════════════
