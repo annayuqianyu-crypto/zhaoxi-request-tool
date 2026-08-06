@@ -1475,6 +1475,19 @@ const DIMENSIONS = ['角色权限','触发条件','输入数据','处理流程',
 // 八个侧面，而真实需求常含多个子模块——此时问「审批链路是什么」本身就有歧义，
 // 模型只能挑一个默认的钻下去。故在 exploring 与 drilling 之间插入 framing：
 // 先把主干与分支拎出来交用户确认排序，再按确认顺序逐个深挖。
+// ── 滚动摘要 ──
+// 长访谈（Sophie 已近 200 轮）若每次生成都重送整场原文，会同时踩三个坑：
+// 贴近字符上限后静默丢弃早期内容、成本随轮次线性上涨、模型在超长上下文中
+// 漏读中段（lost in the middle）——最后一条才是"生成时遗漏需求"的主因。
+// 做法：把已聊透的部分定期压缩成结构化要点，生成时用「摘要 + 最近原文」，
+// 送入长度恒定在数千 token，且早期内容以要点形式永久留存。
+let convDigest    = '';   // 前文归纳要点
+let digestedUpTo  = 0;    // 已归纳到 history 的第几条（只在压缩成功后推进）
+let digestBusy    = false;
+const DIGEST_TRIGGER  = 24;   // 未归纳原文积累到这么多条就触发压缩
+const DIGEST_KEEP_RAW = 12;   // 末尾始终保留这么多条原文，保证细节与衔接
+const DIGEST_BATCH    = 40;   // 单次压缩最多吃这么多条，存量会话分批迭代
+
 let currentFramework   = null;   // {main, branches:[{id,name,desc}]}
 let frameworkConfirmed = false;  // 门禁：false 时禁止 drilling
 let branchPlan         = null;   // 用户确认后的深挖计划（已过滤已排序）
@@ -1511,6 +1524,88 @@ function _buildHistoryText(hist, limit = 20) {
   return text.length > CAP
     ? '（前文较长已省略部分早期内容）\n\n' + text.slice(-CAP)
     : text;
+}
+
+/** 把一批原文压缩进已有摘要，返回合并去重后的新摘要 */
+async function _digestChunk(oldDigest, msgs) {
+  const chunkText = msgs.map(m =>
+    (m.role === 'user' ? '业务方' : '分析师') + '：' + m.content
+  ).join('\n\n');
+  const prompt = `你在为一场正在进行的需求访谈做滚动归纳。请把【已有归纳】与【新增对话】合并成一份新的归纳，供后续生成需求文档使用。
+
+【已有归纳】
+${oldDigest || '（暂无，这是第一批）'}
+
+【新增对话】
+${chunkText}
+
+要求：
+1. 合并去重，**绝不能丢失任何已确认的功能点、使用角色、操作流程、具体数字、时限、审批层级、合规约束**
+2. 按「模块 / 功能」组织，每条尽量保留可落地的细节（谁、何时、多少、什么格式、发给谁）
+3. 明确区分「已确认」与「待澄清」
+4. 不要保留寒暄与过程性对白，只留对需求有信息量的内容
+5. 直接输出归纳正文，不要任何前言、说明或代码块围栏`;
+  return await _callAI([{ role: 'user', content: prompt }], 3000);
+}
+
+/**
+ * 把 history 归纳到 endIdx（不含）。分批迭代，**只有压缩成功才推进游标**，
+ * 任何一批失败都保留原文等下次重试，绝不因一次失败丢内容。
+ */
+async function digestUpTo(endIdx, onProgress) {
+  while (digestedUpTo < endIdx) {
+    const to = Math.min(digestedUpTo + DIGEST_BATCH, endIdx);
+    const next = await _digestChunk(convDigest, history.slice(digestedUpTo, to));
+    if (!next || !next.trim()) throw new Error('归纳返回为空');
+    convDigest   = next.trim();
+    digestedUpTo = to;
+    if (onProgress) onProgress(to, endIdx);
+    autoSave();
+  }
+}
+
+/** 后台静默压缩：够量才做，失败只记日志不打扰用户 */
+async function maybeDigestHistory() {
+  if (digestBusy) return;
+  const end = history.length - DIGEST_KEEP_RAW;
+  if (end - digestedUpTo < DIGEST_TRIGGER) return;
+  digestBusy = true;
+  try {
+    await digestUpTo(end);
+    showToast(`🗂️ 前 ${digestedUpTo} 条对话已归纳为要点，生成时不会遗漏`);
+  } catch (e) {
+    console.warn('[digest] 归纳失败，已保留原文，下次自动重试', e);
+  } finally {
+    digestBusy = false;
+  }
+}
+
+/**
+ * 生成物料前确保前文已归纳。存量会话（如已聊 200 轮却没有摘要的）
+ * 会在这里分批补压缩，用户无需重开会话即可受益。
+ */
+async function ensureDigestBeforeGenerate() {
+  const end = history.length - DIGEST_KEEP_RAW;
+  if (digestBusy || end - digestedUpTo < DIGEST_TRIGGER) return;
+  digestBusy = true;
+  try {
+    showToast('🗂️ 对话较长，正在先归纳前文以免遗漏…');
+    await digestUpTo(end, (done, total) => showToast(`🗂️ 归纳中 ${done}/${total} 条…`));
+    showToast(`🗂️ 前 ${digestedUpTo} 条已归纳完成，开始生成`);
+  } catch (e) {
+    showToast('⚠️ 前文归纳失败，本次将直接使用原文生成');
+  } finally {
+    digestBusy = false;
+  }
+}
+
+/** 生成物料使用的访谈上下文：摘要 + 最近原文，长度恒定可控 */
+function _buildInterviewContext() {
+  const tail = history.slice(digestedUpTo);
+  const tailText = _buildHistoryText(tail, 0);
+  if (!convDigest) return tailText;
+  return `【前 ${digestedUpTo} 条对话的归纳要点】\n${convDigest}\n\n` +
+         `【最近 ${tail.length} 条对话原文】\n${tailText}`;
 }
 
 /**
@@ -2158,7 +2253,17 @@ function applyAIResponse(data, addToHistory, streamBubble) {
     updateQuickChips(data.stage);
   }
   // 每次对话后自动暂存
-  if (addToHistory) autoSave();
+  if (addToHistory) {
+    autoSave();
+    // 后台滚动归纳，不 await，不阻塞用户继续对话
+    maybeDigestHistory();
+    // 长访谈提醒：即使归纳出问题，用户手上也该有一版存档
+    const userTurns = history.filter(h => h.role === 'user').length;
+    if (userTurns > 0 && userTurns % 40 === 0) {
+      setTimeout(() => showToast(
+        `💡 已进行 ${userTurns} 轮对话，建议点右侧「⚡ 生成」先产出一版需求梳理存档`), 1500);
+    }
+  }
 }
 
 // ── UI Helpers ──
@@ -2842,6 +2947,8 @@ async function generateSection(type) {
   if (!history.length) { alert('请先开始对话，再生成需求内容'); return; }
   setGenBtnState(type, 'loading');
   try {
+    // 存量长会话（没有摘要的）在这里补一次归纳，用户无需重开会话
+    await ensureDigestBeforeGenerate();
     if (type === 'prd') {
       await generatePRDInline(); return;
     }
@@ -2856,7 +2963,7 @@ async function generateSection(type) {
 
     // 需求梳理/页面展示要覆盖整场访谈，必须用全量历史（limit=0）；
     // 只取最近 20 条会让长对话中早期确认的需求凭空消失
-    const histText = _buildHistoryText(history, (type === 'summary' || type === 'preview') ? 0 : 20);
+    const histText = (type === 'summary' || type === 'preview') ? _buildInterviewContext() : _buildHistoryText(history, 20);
     let prompt = '';
     let maxTok = 8000;   // 长访谈会提取出很多条需求，3000 会把 JSON 截断
     if (type === 'flowchart') {
@@ -2936,7 +3043,7 @@ async function generateWireframeStream() {
     wrap.innerHTML = '<div style="padding:12px 16px;background:#1e293b;border-radius:8px;color:#94a3b8;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:360px;overflow-y:auto;line-height:1.6" id="wf-stream-pre">正在生成流程图代码，请稍候…</div>';
   }
   try {
-    const histText = _buildHistoryText(history);
+    const histText = _buildInterviewContext();
     const prompt = `根据以下访谈记录，生成一份供 IT 人员使用的功能流程设计图（Mermaid 格式）。\n\n访谈记录：\n${histText}\n\n【严格遵守以下 Mermaid 语法规则】：\n1. 第一行必须是：graph TD\n2. 节点 ID 只允许使用英文字母和数字，严禁中文、空格或特殊符号\n3. 节点标签必须用双引号包裹：U1["用户提交申请"]；判断节点：D1{{"审核是否通过？"}}；开始/结束：S(["开始"])\n4. 连线用 --> 或 -->|"说明"|\n5. 多方案/多路径用 subgraph 分组\n6. 使用 classDef + class 语句为节点着色\n7. 标签内不能出现未转义的英文双引号\n8. 只输出 Mermaid 代码，不要任何说明、注释或多余文字`;
     const pre = document.getElementById('wf-stream-pre');
     const rawCode = await _callAIStream(
@@ -3006,7 +3113,7 @@ async function generateUiWireframeStream() {
   }
   if (specWrap) specWrap.style.display = 'none';
   try {
-    const histText = _buildHistoryText(history);
+    const histText = _buildInterviewContext();
     const prompt = `你是一位资深的B端产品架构师与UX设计师。根据以下访谈记录，生成一份面向IT交付的系统线框图。\n\n访谈记录：\n${histText}\n\n## 输出格式（必须严格按此格式）\n\n[FLOW]\ngraph TD\n（节点ID只用英文字母数字；节点标签用双引号；用户动作用矩形U1["动作"]，系统处理用圆角S1(["处理"])，判断用菱形D1{{"判断？"}}；用subgraph对主要阶段分组；classDef user fill:#ffffff,stroke:#000000,color:#000000 / classDef sys fill:#f5f5f5,stroke:#000000,color:#000000；最后一行必须是：linkStyle default stroke:#FFD700,stroke-width:3px）\n[/FLOW]\n\n[SPEC]\n**系统名称**：[根据需求命名]\n**业务流程总结**：[5-8个关键词]\n\n**核心页面**：[主要工作台名称]\n布局结构：\n- 顶部导航栏：系统名称 | 🔍搜索框 | 通知铃 | 👤用户名\n- 左侧菜单（一级/二级）\n- 主体操作区：[+ 新建] [筛选▼] [导出]\n- 主体数据区（表格）：字段列表+示例数据\n- 右侧详情抽屉：Tab1基本信息/Tab2业务信息/Tab3操作日志\n\n关键交互流、字段与实体映射表\n[/SPEC]\n\n重要提示：[FLOW]和[/FLOW]之间只输出合法Mermaid代码；linkStyle default必须在最后一行；所有节点ID仅用英文字母数字`;
     const pre = document.getElementById('ui-wf-stream-pre');
     const rawOutput = await _callAIStream(
@@ -3321,7 +3428,8 @@ async function generatePRDInline() {
   btn.textContent = '生成中…'; btn.disabled = true;
   document.getElementById('prd-empty-tip').style.display = 'none';
   try {
-    const histText = _buildHistoryText(history);
+    await ensureDigestBeforeGenerate();
+    const histText = _buildInterviewContext();
     const reqLines = currentRequirements.map(r => {
       if (typeof r === 'string') return '- ' + r;
       let s = `\n### ${r.module||''} · ${r.feature||''}\n**功能说明**：${r.description||''}`;
@@ -3571,7 +3679,7 @@ async function startExport() {
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('doc-content').textContent = '正在生成需求文档，请稍候…';
   try {
-    const histText2 = _buildHistoryText(history);
+    const histText2 = _buildInterviewContext();
     const docText = await _callAI([{ role: 'user', content: `根据以下访谈记录，生成一份专业的IT需求规格说明书（Markdown格式）。\n\n访谈记录：\n${histText2}\n\n请包含：项目背景与目标、涉及角色与权限、业务流程说明、功能需求清单、界面设计要点、数据需求、非功能性需求、待确认事项、验收标准。` }], 4096);
     document.getElementById('doc-content').textContent = docText || '（无内容）';
   } catch(e) {
@@ -4061,6 +4169,8 @@ function autoSave() {
     uiWireframeSpec: currentUiWireframeSpec,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     confirmed: currentConfirmed,
+    convDigest,
+    digestedUpTo,
     framework: currentFramework,
     frameworkConfirmed,
     branchPlan,
@@ -4088,6 +4198,8 @@ function saveCurrentSession(customName) {
     uiWireframeMermaid: currentUiWireframeMermaid,
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     confirmed: currentConfirmed,
+    convDigest,
+    digestedUpTo,
     framework: currentFramework,
     frameworkConfirmed,
     branchPlan,
@@ -4168,6 +4280,8 @@ async function loadSession(id) {
   currentUiWireframeMermaid = session.uiWireframeMermaid || '';
   currentUiWireframeSpec    = session.uiWireframeSpec    || '';
   currentConfirmed     = session.confirmed || null;
+  convDigest           = session.convDigest || '';
+  digestedUpTo         = session.digestedUpTo || 0;
   currentFramework     = session.framework || null;
   frameworkConfirmed   = !!session.frameworkConfirmed;
   branchPlan           = session.branchPlan || null;
@@ -4278,6 +4392,9 @@ function newSession() {
   currentUiWireframeMermaid = '';
   currentUiWireframeSpec = '';
   currentConfirmed = null;
+  convDigest = '';
+  digestedUpTo = 0;
+  digestBusy = false;
   currentFramework = null;
   frameworkConfirmed = false;
   branchPlan = null;
@@ -4395,6 +4512,8 @@ window.addEventListener('DOMContentLoaded', () => {
           currentRequirements = autosave.requirements || [];
           currentMermaid = autosave.mermaid || '';
           currentConfirmed = autosave.confirmed || null;
+          convDigest = autosave.convDigest || '';
+          digestedUpTo = autosave.digestedUpTo || 0;
           currentFramework = autosave.framework || null;
           frameworkConfirmed = !!autosave.frameworkConfirmed;
           branchPlan = autosave.branchPlan || null;
