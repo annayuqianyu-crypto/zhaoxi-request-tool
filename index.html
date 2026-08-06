@@ -559,6 +559,14 @@
     .btn-gen-all { background:var(--navy); color:white; }
     .btn-gen-all:hover:not(:disabled) { background:#2a4a7f; transform:translateY(-1px); box-shadow:0 3px 8px rgba(26,54,93,.25); }
 
+    /* ── 会话导出／导入 ── */
+    .sess-io-btn { font-size:12px; padding:6px 14px; background:#fff; color:#4a5568; border:1px solid var(--border); border-radius:8px; cursor:pointer; font-weight:600; }
+    .sess-io-btn:hover { background:#edf2f7; border-color:#cbd5e0; }
+    #sessions-storage-tip { padding:0 18px 8px; font-size:11.5px; color:#a0aec0; line-height:1.6; }
+    #sessions-storage-tip.warn { color:#c05621; font-weight:600; }
+    .sess-card-export { background:none; border:none; cursor:pointer; color:#a0aec0; font-size:12px; padding:0 4px; line-height:1; }
+    .sess-card-export:hover { color:#2b6cb0; }
+
     /* ── 框架确认卡片（framing 阶段）── */
     .fw-card { margin:10px 0 10px 42px; background:#fff; border:1.5px solid #90cdf4; border-radius:12px; padding:14px 16px; box-shadow:0 2px 10px rgba(66,153,225,.12); }
     .fw-card.locked { border-color:var(--border); box-shadow:none; opacity:.75; }
@@ -625,7 +633,7 @@
 <div id="login-modal">
   <div class="login-box">
     <div class="login-logo">朝曦家办 · 需求<span>打磨</span>工作台</div>
-    <div class="login-sub">请使用公司邮箱登录<br>您的会话记录将安全保存在云端，支持跨设备查看</div>
+    <div class="login-sub">请使用公司邮箱登录<br>会话记录仅保存在本机浏览器，建议定期在「任务列表」导出备份</div>
     <div class="login-field">
       <label for="login-email">邮箱地址</label>
       <input id="login-email" type="email" placeholder="yourname@company.com" onkeydown="if(event.key==='Enter')loginUser()">
@@ -1034,11 +1042,11 @@
               </div>
               <div style="font-size:13px;color:#4a5568;display:flex;gap:8px;align-items:flex-start;">
                 <span style="background:#edf2f7;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:700;color:#2d3748;white-space:nowrap;flex-shrink:0;">💾 保存</span>
-                <span style="color:#718096;line-height:1.65;">将当前访谈会话保存至云端（需登录），下次在任意设备可继续</span>
+                <span style="color:#718096;line-height:1.65;">将当前访谈会话保存到本机浏览器，下次打开可继续（仅限本设备）</span>
               </div>
               <div style="font-size:13px;color:#4a5568;display:flex;gap:8px;align-items:flex-start;">
                 <span style="background:#edf2f7;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:700;color:#2d3748;white-space:nowrap;flex-shrink:0;">📋 任务列表</span>
-                <span style="color:#718096;line-height:1.65;">查看全部已保存的需求任务，可切换、继续或删除历史会话</span>
+                <span style="color:#718096;line-height:1.65;">查看全部已保存的需求任务，可切换、继续、删除，并可导出备份／导入恢复</span>
               </div>
               <div style="font-size:13px;color:#4a5568;display:flex;gap:8px;align-items:flex-start;">
                 <span style="background:#edf2f7;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:700;color:#2d3748;white-space:nowrap;flex-shrink:0;">➕ 新任务</span>
@@ -1095,7 +1103,7 @@
           <div style="background:white;border:1px solid var(--border);border-radius:12px;overflow:hidden;">
             <div style="background:#f7fafc;padding:11px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;">
               <span style="font-size:17px;">👤</span>
-              <span style="font-size:15px;font-weight:700;color:var(--navy);">登录 &amp; 会话云同步</span>
+              <span style="font-size:15px;font-weight:700;color:var(--navy);">登录 &amp; 会话存储</span>
             </div>
             <div style="padding:14px 16px;font-size:13px;color:#718096;line-height:1.7;">
               <div style="display:flex;flex-direction:column;gap:9px;">
@@ -1105,7 +1113,7 @@
                 </div>
                 <div style="display:flex;gap:9px;align-items:flex-start;">
                   <span style="font-size:15px;flex-shrink:0;">💾</span>
-                  <span>会话保存在本地浏览器，换设备或清除缓存后不可恢复</span>
+                  <span><b>会话仅保存在本机浏览器</b>，换设备或清除缓存后不可恢复，请定期导出备份</span>
                 </div>
                 <div style="display:flex;gap:9px;align-items:flex-start;">
                   <span style="font-size:15px;flex-shrink:0;">👁️</span>
@@ -1113,7 +1121,7 @@
                 </div>
                 <div style="display:flex;gap:9px;align-items:flex-start;">
                   <span style="font-size:15px;flex-shrink:0;">📋</span>
-                  <span>点击顶栏「任务列表」查看、切换或删除已保存的需求任务</span>
+                  <span>点击顶栏「任务列表」可查看、切换、删除任务，并<b>导出备份／导入恢复</b></span>
                 </div>
               </div>
             </div>
@@ -1389,7 +1397,11 @@
     <div id="sessions-toolbar">
       <button class="btn btn-success" onclick="saveCurrentSession(null)" style="font-size:12px;padding:6px 14px;">💾 保存当前会话</button>
       <button class="btn" onclick="newSession()" style="font-size:12px;padding:6px 14px;background:var(--navy);color:white;border-radius:8px;border:none;cursor:pointer;font-weight:600;">➕ 新建任务</button>
+      <button class="btn sess-io-btn" onclick="exportAllSessions()" title="把全部任务导出为一个备份文件">📤 导出备份</button>
+      <button class="btn sess-io-btn" onclick="document.getElementById('sessions-import-input').click()" title="从备份文件恢复任务">📥 导入恢复</button>
+      <input id="sessions-import-input" type="file" accept=".json" hidden onchange="importSessions(event)">
     </div>
+    <div id="sessions-storage-tip"></div>
     <div id="sessions-list">
       <div style="text-align:center;color:#a0aec0;padding:32px;font-size:13px;">暂无保存的任务<br>点击「保存当前会话」开始记录</div>
     </div>
@@ -4144,8 +4156,23 @@ function getSessions() {
   catch { return []; }
 }
 
+/**
+ * 写入会话列表。localStorage 只有约 5MB，长访谈加上滚动摘要后单个会话不小，
+ * 写爆是真实可能。此前没有 try/catch，超限时 QuotaExceededError 会静默打断
+ * 保存——用户以为存上了，其实没有。现在明确失败并指路导出备份。
+ * @returns {boolean} 是否写入成功
+ */
 function saveSessions(sessions) {
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+    return true;
+  } catch (e) {
+    const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    alert(quota
+      ? '⚠️ 本机存储空间已满，本次保存未生效！\n\n请在「任务列表」中点击「📤 导出备份」保存资料，然后删除不再需要的历史任务，再重试。'
+      : '保存失败：' + (e && e.message ? e.message : '未知错误'));
+    return false;
+  }
 }
 
 function autoSessionName() {
@@ -4196,6 +4223,8 @@ function saveCurrentSession(customName) {
     mermaid: currentMermaid,
     wireframeMermaid: currentWireframeMermaid,
     uiWireframeMermaid: currentUiWireframeMermaid,
+    uiWireframeSpec: currentUiWireframeSpec,   // 曾遗漏：autoSave 写了、loadSession 读了，
+                                               // 唯独手动保存不写，导致手动存的会话丢失线框图说明
     prdContent: document.getElementById('prd-inline-content')?.textContent?.trim() || '',
     confirmed: currentConfirmed,
     convDigest,
@@ -4208,12 +4237,11 @@ function saveCurrentSession(customName) {
   };
   if (idx >= 0) sessions[idx] = session;
   else sessions.unshift(session);
-  saveSessions(sessions);
+  // 写入失败（多为存储配额耗尽）时 saveSessions 已弹窗说明，这里不能再报"已保存"
+  if (!saveSessions(sessions)) return;
   updateCurrentSessionLabel(name);
   showToast('💾 已保存：' + name);
   if (document.getElementById('sessions-modal').classList.contains('open')) renderSessionsList();
-  // 同步到服务端（登录用户）
-  saveToServer(session);
 }
 
 function saveCurrentSessionAs() {
@@ -4224,45 +4252,10 @@ function saveCurrentSessionAs() {
 }
 
 async function loadSession(id) {
+  // 服务端已下线：此处原本会先请求 /api/sessions/{id}，在 GitHub Pages 上必定
+  // 404，先弹「📂 加载中…」再静默降级，纯属多余往返与误导性提示，已移除。
   let session = null;
-
-  // 已登录时优先从服务端拉取完整内容（云端优先，确保多设备同步）
-  if (userToken) {
-    try {
-      showToast('📂 加载中…');
-      const resp = await fetch(`/api/sessions/${id}`, {
-        headers: { 'Authorization': 'Bearer ' + userToken }
-      });
-      if (resp.ok) {
-        const d = await resp.json();
-        session = {
-          id: d.id,
-          name: d.title || '云端会话',
-          savedAt: d.updated_at,
-          history: d.history || [],
-          requirements: d.requirements || [],
-          mermaid: d.mermaid || '',
-          wireframeMermaid: d.wireframeMermaid || '',
-          uiWireframeMermaid: d.uiWireframeMermaid || '',
-          uiWireframeSpec: d.uiWireframeSpec || '',
-          prdContent: d.prdContent || '',
-          completeness: d.completeness || 0,
-          fromServer: true
-        };
-        // 用完整内容更新本地缓存
-        const local = getSessions();
-        const idx = local.findIndex(s => s.id === id);
-        if (idx >= 0) local[idx] = { ...local[idx], ...session };
-        else local.unshift(session);
-        saveSessions(local);
-      }
-    } catch (e) {
-      console.warn('[loadSession] 服务端拉取失败，降级到本地缓存', e);
-    }
-  }
-
-  // 降级：从本地缓存读取
-  if (!session) {
+  {
     const sessions = getSessions();
     session = sessions.find(s => s.id === id);
   }
@@ -4467,9 +4460,100 @@ function hideSessionsPanelOnOverlay(e) {
   if (e.target === document.getElementById('sessions-modal')) hideSessionsPanel();
 }
 
+// ══════════════════════════════════════════
+// ── 会话导出 / 导入 ──
+// 会话只存在本机 localStorage，清缓存或换设备即全部蒸发，此前没有任何补救
+// 手段。导出用于备份，导入用于恢复——只做导出而没有导入，备份是取不回来的。
+// ══════════════════════════════════════════
+const SESSION_BACKUP_FORMAT = 'zhaoxi-request-tool/sessions';
+
+function _backupFileName(suffix) {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `朝曦需求任务备份_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${suffix||''}.json`;
+}
+
+/** 导出全部任务为一个备份文件 */
+function exportAllSessions() {
+  const sessions = getSessions();
+  if (!sessions.length) { showToast('⚠️ 暂无已保存的任务可导出'); return; }
+  const pack = { format: SESSION_BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), sessions };
+  downloadBlob(new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json;charset=utf-8' }), _backupFileName());
+  showToast(`📤 已导出 ${sessions.length} 个任务，请妥善保存该文件`);
+}
+
+/** 导出单个任务 */
+function exportOneSession(id, e) {
+  if (e) e.stopPropagation();
+  const s = getSessions().find(x => x.id === id);
+  if (!s) { showToast('⚠️ 会话数据不存在'); return; }
+  const pack = { format: SESSION_BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), sessions: [s] };
+  const safe = (s.name || '任务').replace(/[\\/:*?"<>|]/g, '_').slice(0, 24);
+  downloadBlob(new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json;charset=utf-8' }), _backupFileName('_' + safe));
+  showToast('📤 已导出：' + s.name);
+}
+
+/**
+ * 从备份文件恢复。同 id 视为同一任务：以「保存时间较新」的一方为准，
+ * 避免用旧备份覆盖掉本机更新的进度。
+ */
+async function importSessions(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  try {
+    const pack = JSON.parse(await file.text());
+    const incoming = Array.isArray(pack) ? pack : pack.sessions;
+    if (!Array.isArray(incoming) || !incoming.length) throw new Error('文件中没有可导入的任务');
+    const valid = incoming.filter(s => s && s.id && Array.isArray(s.history));
+    if (!valid.length) throw new Error('文件格式不正确，未找到有效的任务数据');
+
+    const local = getSessions();
+    const byId = new Map(local.map(s => [s.id, s]));
+    let added = 0, updated = 0, skipped = 0;
+    valid.forEach(s => {
+      const cur = byId.get(s.id);
+      if (!cur) { byId.set(s.id, s); added++; return; }
+      // 时间较新者胜出，防止旧备份覆盖本机较新的进度
+      if (new Date(s.savedAt || 0) > new Date(cur.savedAt || 0)) { byId.set(s.id, s); updated++; }
+      else skipped++;
+    });
+    const merged = Array.from(byId.values())
+      .sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0));
+
+    if (!saveSessions(merged)) return;   // 超出存储配额时 saveSessions 已提示
+    renderSessionsList();
+    showToast(`📥 导入完成：新增 ${added} 个` +
+      (updated ? `，更新 ${updated} 个` : '') +
+      (skipped ? `，${skipped} 个因本机版本更新而跳过` : ''));
+  } catch (e) {
+    alert('导入失败：' + e.message);
+  }
+}
+
+/** 估算 localStorage 用量，接近上限时在任务列表顶部明确警示 */
+function updateStorageTip() {
+  const el = document.getElementById('sessions-storage-tip');
+  if (!el) return;
+  let bytes = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      bytes += (k.length + (localStorage.getItem(k) || '').length) * 2;   // UTF-16
+    }
+  } catch { el.textContent = ''; return; }
+  const mb = bytes / 1024 / 1024;
+  const pct = Math.min(100, Math.round(mb / 5 * 100));
+  el.className = pct >= 75 ? 'warn' : '';
+  el.textContent = pct >= 75
+    ? `⚠️ 本机存储已用约 ${mb.toFixed(1)}MB / 5MB（${pct}%），接近上限后将无法再保存，请尽快「导出备份」并删除不需要的任务`
+    : `本机存储已用约 ${mb.toFixed(1)}MB / 5MB（${pct}%）· 会话仅存于本机，建议定期导出备份`;
+}
+
 function renderSessionsList() {
   const sessions = getSessions();
   const container = document.getElementById('sessions-list');
+  updateStorageTip();
   if (!sessions.length) {
     container.innerHTML = '<div style="text-align:center;color:#a0aec0;padding:40px 20px;font-size:13px;line-height:1.8;">暂无保存的任务<br>点击上方「💾 保存当前会话」开始记录</div>';
     return;
@@ -4479,12 +4563,12 @@ function renderSessionsList() {
     const date = new Date(s.savedAt);
     const dateStr = date.toLocaleDateString('zh-CN', {month:'numeric', day:'numeric'}) + ' ' + date.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
     const msgCount = (s.history || []).filter(h => h.role === 'user').length;
-    const cloudBadge = s.fromServer ? '<span style="background:#ebf8ff;color:#2b6cb0;font-size:9px;padding:1px 6px;border-radius:7px;font-weight:700;">☁️ 云端</span>' : '';
+    // 服务端同步已下线，不再存在"云端会话"，徽章一并移除以免误导
     return `<div class="session-card ${isCurrent ? 'active-session' : ''}" onclick="loadSession('${s.id}')">
       <div class="session-card-top">
         <span class="session-card-name" title="${esc(s.name)}">${esc(s.name)}</span>
         ${isCurrent ? '<span class="session-current-badge">当前</span>' : ''}
-        ${cloudBadge}
+        <button class="sess-card-export" onclick="exportOneSession('${s.id}',event)" title="导出此任务">📤</button>
         <button class="session-card-del" onclick="deleteSession('${s.id}',event)" title="删除">✕</button>
       </div>
       <div class="session-card-meta">
@@ -4951,10 +5035,6 @@ function logoutUser() {
   updateUserDisplay();
   showToast('已退出登录');
 }
-
-// ── 会话仅本地存储，无服务端同步 ──
-async function syncServerSessions() { return; }
-async function saveToServer(session) { return; }
 </script>
 </body>
 </html>
