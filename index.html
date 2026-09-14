@@ -338,24 +338,6 @@
     .exp-btn.exp-word { border-color:#38a169; color:#38a169; }
     .exp-btn.exp-word:hover { background:#f0fff4; }
 
-    /* ── Device Splash Screen ── */
-    #device-splash { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#0a1628 0%,#1a365d 45%,#2a4a7f 100%); }
-    .splash-inner { text-align:center; color:white; padding:32px 20px; max-width:500px; width:92%; }
-    .splash-watermark { font-size:11px; letter-spacing:4px; color:#90cdf4; text-transform:uppercase; margin-bottom:20px; opacity:.7; }
-    .splash-brand { font-size:38px; font-weight:800; letter-spacing:-1px; margin-bottom:10px; }
-    .splash-brand span { color:#48bb78; }
-    .splash-tagline { font-size:13px; color:#90cdf4; line-height:1.8; margin-bottom:24px; }
-    .splash-skills { display:flex; gap:7px; justify-content:center; flex-wrap:wrap; margin-bottom:36px; }
-    .splash-skill { font-size:11px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18); padding:4px 12px; border-radius:12px; color:#bee3f8; }
-    .splash-choices { display:flex; gap:16px; justify-content:center; margin-bottom:24px; }
-    .splash-card { flex:1; max-width:190px; background:rgba(255,255,255,.07); border:1.5px solid rgba(255,255,255,.18); border-radius:18px; padding:28px 16px 22px; cursor:pointer; transition:all .28s; }
-    .splash-card:hover { background:rgba(255,255,255,.17); border-color:rgba(255,255,255,.5); transform:translateY(-4px); box-shadow:0 16px 40px rgba(0,0,0,.35); }
-    .splash-card-icon { font-size:44px; margin-bottom:14px; }
-    .splash-card-title { font-size:18px; font-weight:700; margin-bottom:8px; }
-    .splash-card-desc { font-size:12px; color:#a0c4e8; line-height:1.7; }
-    .splash-footer { font-size:12px; color:rgba(255,255,255,.35); cursor:pointer; }
-    .splash-footer:hover { color:rgba(255,255,255,.65); }
-
     /* ── Mobile Mode Layout ── */
     .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; height:58px; background:white; border-top:1px solid var(--border); z-index:40; flex-direction:row; align-items:stretch; box-shadow:0 -3px 14px rgba(0,0,0,.08); }
     .mob-nav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; cursor:pointer; border:none; background:none; color:#a0aec0; font-size:10px; font-weight:600; padding:6px 2px; transition:all .2s; position:relative; }
@@ -600,35 +582,6 @@
 </head>
 <body>
 
-<!-- ── Device Selection Splash ── -->
-<div id="device-splash">
-  <div class="splash-inner">
-    <div class="splash-watermark">朝曦金融高端客户服务平台</div>
-    <div class="splash-brand">朝曦家办 · 需求<span>打磨</span>工作台</div>
-    <div class="splash-tagline">AI深度访谈 · 实时流程图 · 一键输出PRD<br>让业务团队无需懂IT，也能清晰表达需求</div>
-    <div class="splash-skills">
-      <span class="splash-skill">家族财富架构</span>
-      <span class="splash-skill">全球税务规划</span>
-      <span class="splash-skill">资本市场服务</span>
-      <span class="splash-skill">法律咨询</span>
-      <span class="splash-skill">企业治理</span>
-    </div>
-    <div class="splash-choices">
-      <div class="splash-card" onclick="selectDevice('desktop')">
-        <div class="splash-card-icon">💻</div>
-        <div class="splash-card-title">电脑端</div>
-        <div class="splash-card-desc">双面板布局<br>对话与流程图实时并排<br>完整功能体验</div>
-      </div>
-      <div class="splash-card" onclick="selectDevice('mobile')">
-        <div class="splash-card-icon">📱</div>
-        <div class="splash-card-title">手机端</div>
-        <div class="splash-card-desc">对话优先布局<br>随时随地发起访谈<br>快捷回复 + 语音输入</div>
-      </div>
-    </div>
-    <div class="splash-footer" onclick="selectDevice('desktop')">直接进入电脑端体验 →</div>
-  </div>
-</div>
-
 <!-- ── Login Modal ── -->
 <div id="login-modal">
   <div class="login-box">
@@ -663,7 +616,6 @@
     <button class="hdr-btn" onclick="showSessionsPanel()" title="查看所有已保存任务">📋 任务列表</button>
     <button class="hdr-btn hdr-new" onclick="newSession()" title="开始一个全新的需求访谈">➕ 新任务</button>
     <button id="export-btn" onclick="startExport()">⬇ 导出文档</button>
-    <button class="mob-switch-btn" onclick="switchDevice()" title="切换到电脑端">💻 电脑端</button>
   </div>
 </header>
 
@@ -4862,53 +4814,27 @@ function initDivider() {
 document.addEventListener('DOMContentLoaded', initDivider);
 
 // ══════════════════════════════════════════
-// ── 设备选择 & 手机端 (Device & Mobile) ──
+// ── 电脑端启动 ──
 // ══════════════════════════════════════════
 
-// 初始化：每次刷新/重新打开都显示首页选择
-// 用 sessionStorage 区分：同一标签页内选过就不重复弹，新开/刷新则必弹
-(function initDevice() {
-  const pref = sessionStorage.getItem('zhaoxi_device_session');
-  if (pref) {
-    // 本次会话已选过，直接沿用
-    document.getElementById('device-splash').style.display = 'none';
-    if (pref === 'mobile') document.body.classList.add('mobile-mode');
-    // 延迟执行，确保所有变量完成初始化
-    setTimeout(function() {
-      if (userToken) {
-        tryAutoLogin();       // 已登录：静默验证并同步
-      } else {
-        // 未登录：弹出登录框，让用户选择登录或访客
-        const modal = document.getElementById('login-modal');
-        if (modal) {
-          modal.classList.add('open');
-          const emailInput = document.getElementById('login-email');
-          if (emailInput) emailInput.focus();
-        }
+// 直接使用电脑端布局，不再读取旧的设备选择偏好。
+// 只调整显示状态，保留登录信息、API 配置、任务列表与对话暂存。
+(function initDesktop() {
+  document.body.classList.remove('mobile-mode');
+  // 延迟执行，确保所有变量完成初始化；沿用电脑端登录/访客入口。
+  setTimeout(function() {
+    if (userToken) {
+      tryAutoLogin();
+    } else {
+      const modal = document.getElementById('login-modal');
+      if (modal) {
+        modal.classList.add('open');
+        const emailInput = document.getElementById('login-email');
+        if (emailInput) emailInput.focus();
       }
-    }, 0);
-  }
-  // 否则保持 splash 显示，等用户点击选择
+    }
+  }, 0);
 })();
-
-function selectDevice(type) {
-  sessionStorage.setItem('zhaoxi_device_session', type);
-  document.getElementById('device-splash').style.display = 'none';
-  if (type === 'mobile') document.body.classList.add('mobile-mode');
-  else document.body.classList.remove('mobile-mode');
-  // 已登录则直接进入，否则弹登录框
-  if (!userToken) {
-    document.getElementById('login-modal').classList.add('open');
-    setTimeout(() => document.getElementById('login-email').focus(), 150);
-  } else {
-    tryAutoLogin();
-  }
-}
-
-function switchDevice() {
-  sessionStorage.removeItem('zhaoxi_device_session');
-  location.reload();
-}
 
 function isMobile() { return document.body.classList.contains('mobile-mode'); }
 
